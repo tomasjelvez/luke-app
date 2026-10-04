@@ -8,6 +8,10 @@ const sql = postgres(config.DATABASE_URL);
 
 export const db = drizzle(sql, { schema });
 
+export async function closeDb() {
+  await sql.end({ timeout: 5 });
+}
+
 export async function runMigrations() {
   await migrate(db, { migrationsFolder: "./drizzle" });
 }
