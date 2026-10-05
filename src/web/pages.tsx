@@ -35,8 +35,8 @@ export function SignupPage() {
       const f = e.target, btn = f.querySelector("button"), err = document.getElementById("form-error");
       btn.disabled = true; err.textContent = "";
       try {
-        await verifyWithWhatsApp("/api/auth/signup",
-          { name: f.name.value, currency: f.currency.value, timezone: f.timezone.value },
+        // Ojo: f.name sería el atributo "name" del <form>, no el campo; por eso usamos FormData.
+        await verifyWithWhatsApp("/api/auth/signup", Object.fromEntries(new FormData(f)),
           (m) => (document.getElementById("verify-error").textContent = m));
       } catch (e) { err.textContent = e.message; btn.disabled = false; }
     });`;
@@ -107,7 +107,7 @@ export function AccountPage(props: { user: User; month: PeriodSummary }) {
       const f = e.target, msg = document.getElementById("profile-msg");
       try {
         const res = await fetch("/api/me", { method: "PATCH", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: f.name.value, currency: f.currency.value, timezone: f.timezone.value }) });
+          body: JSON.stringify(Object.fromEntries(new FormData(f))) });
         const data = await res.json();
         msg.textContent = res.ok ? "Guardado ✓" : data.error;
       } catch { msg.textContent = "No se pudo guardar"; }
