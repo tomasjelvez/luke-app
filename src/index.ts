@@ -4,16 +4,18 @@ import { app } from "./app.js";
 import { config } from "./config.js";
 import { closeDb, runMigrations } from "./db/client.js";
 import { runNightly } from "./services/nightly.js";
+import { bootstrapLegacyOwner } from "./services/users.js";
 
 await runMigrations();
+await bootstrapLegacyOwner();
 
-// Revisa cada 15 minutos si toca mandar el resumen nocturno.
+// Revisa cada 15 minutos si a alguien le toca el resumen nocturno.
 const nightly = new Cron("*/15 * * * *", { protect: true }, () =>
   runNightly().catch((err) => console.error("[nightly] falló", err)),
 );
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
-  console.log(`luke-app escuchando en http://localhost:${info.port}`);
+  console.log(`luke-app escuchando en http://localhost:${info.port} (${config.PUBLIC_URL})`);
 });
 
 // Railway manda SIGTERM al redeployar: dejamos de aceptar conexiones y cerramos la base.

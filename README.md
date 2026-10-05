@@ -1,6 +1,6 @@
 # luke-app
 
-Bot de WhatsApp para registrar gastos sin esfuerzo. MVP de un solo usuario.
+Bot de WhatsApp para registrar gastos sin esfuerzo, con registro web y cuentas por número de WhatsApp.
 
 - **Apple Pay → WhatsApp:** cada pago con Apple Pay llega por un Atajo de iOS; Luke lo registra y te pregunta "¿qué fue?" con botones.
 - **Audios y texto:** "almuerzo 15 dólares", "8 lucas en el súper y 2 en café", "ayer pagué 40 de Uber".
@@ -9,6 +9,14 @@ Bot de WhatsApp para registrar gastos sin esfuerzo. MVP de un solo usuario.
 - **Resumen nocturno** (21:00 hora local) con lo del día, pendientes y la pregunta por gastos en efectivo.
 
 Stack: Node + TypeScript, [Hono](https://hono.dev), Postgres + Drizzle, [Kapso](https://kapso.ai) (WhatsApp), Claude (interpretación).
+
+## Cuentas
+
+- **Registro:** `/registro` pide nombre y moneda (la zona horaria se detecta sola). La persona envía un código a Luke por WhatsApp (`wa.me` con el texto ya escrito) y así verifica su número, sin SMS ni contraseñas.
+- **Entrar:** `/entrar` genera otro código; al enviarlo, Luke pide confirmar con "Sí, soy yo" para evitar que alguien engañe a otra persona para que le mande su código.
+- **Apple Pay:** `/cuenta/apple-pay` genera un token personal (se guarda con hash) y muestra los pasos del Atajo. La página detecta sola la primera compra.
+- **API para la app móvil:** las mismas rutas en `/api/*`; con `client: "mobile"` en `/api/auth/poll` se recibe un token de sesión para usar como `Authorization: Bearer`.
+- Números sin cuenta que le escriben a Luke reciben el link de registro. `MAX_USERS` limita las cuentas mientras el registro sea abierto.
 
 ## Cómo funciona
 
@@ -85,7 +93,7 @@ El monto llega como texto formateado por iOS ("$12.50", "A$12.50", "CLP 4.500");
 |---|---|
 | `npm run dev` | Servidor con recarga automática |
 | `npm start` | Servidor (producción) |
-| `npm test` | Tests unitarios (montos, firma, zonas horarias, payloads) |
+| `npm test` | Tests unitarios y de integración (necesitan `npm run db:up`: crean la base `luke_test`) |
 | `npm run typecheck` | Chequeo de tipos |
 | `npm run db:up` | Postgres local en Docker |
 | `npm run db:generate` | Genera una migración tras cambiar `src/db/schema.ts` |

@@ -1,0 +1,9 @@
+process.env.DATABASE_URL ??= "postgres://luke:luke@localhost:5433/luke_test";
+process.env.PUBLIC_URL = "http://localhost:3000";
+process.env.KAPSO_API_KEY = "test";
+process.env.KAPSO_PHONE_NUMBER_ID = "123";
+process.env.KAPSO_WEBHOOK_SECRET = "whsecret";
+process.env.WHATSAPP_BOT_NUMBER = "56920403095";
+process.env.MAX_USERS = "3";
+process.env.OWNER_PHONE = "56911111111";
+process.env.APPLE_PAY_TOKEN = "legacy-token-legacy-token";

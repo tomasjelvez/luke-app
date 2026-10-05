@@ -4,7 +4,7 @@ import postgres from "postgres";
 import { config } from "../config.js";
 import * as schema from "./schema.js";
 
-const sql = postgres(config.DATABASE_URL);
+const sql = postgres(config.DATABASE_URL, { onnotice: () => {} });
 
 export const db = drizzle(sql, { schema });
 

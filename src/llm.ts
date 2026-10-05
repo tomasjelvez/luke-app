@@ -39,7 +39,7 @@ const Interpretation = z.object({
 export type InterpretedAction = z.infer<typeof Action>;
 export type Interpretation = z.infer<typeof Interpretation>;
 
-const SYSTEM_PROMPT = `Eres Luke, un asistente que registra gastos personales por WhatsApp. El usuario es chileno y vive en Australia; te escribe en español chileno informal, por texto o por audio transcrito (la transcripción puede tener errores).
+const SYSTEM_PROMPT = `Eres Luke, un asistente que registra gastos personales por WhatsApp. El usuario te escribe en español informal (muchas veces chileno), por texto o por audio transcrito (la transcripción puede tener errores). En <contexto> vienen su nombre, su zona horaria y su moneda por defecto.
 
 Tu tarea: convertir cada mensaje en acciones estructuradas.
 
@@ -55,6 +55,8 @@ Reglas:
 - Si el mensaje es ambiguo (por ejemplo, no tiene monto), no adivines: usa smalltalk con una pregunta corta en reply.`;
 
 export interface InterpretContext {
+  userName: string | null;
+  timezone: string;
   today: string;
   defaultCurrency: string;
   pending: { tx_id: number; amount: string; merchant: string | null; suggested_category: string; when: string }[];
@@ -74,6 +76,8 @@ export async function interpretMessage(text: string, ctx: InterpretContext): Pro
         content:
           `<contexto>\n${JSON.stringify(
             {
+              usuario: ctx.userName,
+              zona_horaria: ctx.timezone,
               hoy: ctx.today,
               moneda_por_defecto: ctx.defaultCurrency,
               gastos_pendientes_de_contexto: ctx.pending,
@@ -98,15 +102,16 @@ export async function interpretMessage(text: string, ctx: InterpretContext): Pro
 
 const CategoryGuess = z.object({ category: z.enum(CATEGORIES) });
 
-export async function suggestCategory(merchant: string): Promise<Category> {
+export async function suggestCategory(merchant: string, timezone: string): Promise<Category> {
   try {
     const response = await client.messages.parse({
       model: config.LLM_MODEL,
       max_tokens: 16000,
       output_config: { effort: "low", format: zodOutputFormat(CategoryGuess) },
       system:
-        "Clasifica el comercio de una compra con tarjeta en Australia (o Chile) en una categoría de gasto personal. " +
-        "Los nombres vienen como aparecen en el estado de cuenta, ej. 'WOOLWORTHS 1234 SYDNEY'.",
+        "Clasifica el comercio de una compra con tarjeta en una categoría de gasto personal. " +
+        `El usuario vive en la zona horaria ${timezone}. ` +
+        "Los nombres vienen como aparecen en Apple Pay o el estado de cuenta, ej. 'Woolworths' o 'AMPOL TWEED HEADS'.",
       messages: [{ role: "user", content: merchant }],
     });
     return response.parsed_output?.category ?? "Otros";

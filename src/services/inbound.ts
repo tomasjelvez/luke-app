@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { isCategory } from "../categories.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
@@ -6,32 +6,66 @@ import { messages, transactions, type Transaction, type User } from "../db/schem
 import { formatMoney, toMinor } from "../lib/money.js";
 import type { InboundEvent } from "../lib/kapsoPayload.js";
 import { localDate, startOfLocalDay } from "../lib/time.js";
+import { findCode } from "../lib/tokens.js";
 import { interpretMessage, type InterpretedAction } from "../llm.js";
 import { markReadWithTyping, sendText } from "../whatsapp.js";
 import { flushQueuedQuestions } from "./ask.js";
+import { confirmAuth, handleAuthCode } from "./auth.js";
 import {
   describeTx,
-  ensureOwner,
   formatSummary,
   getTransaction,
   pendingTransactions,
   recentTransactions,
   summarize,
-  touchInbound,
   txWhen,
 } from "./expenses.js";
+import { findUserByPhone, normalizePhone, touchInbound } from "./users.js";
+
+// Mensajes de números sin cuenta: no van a la tabla `messages` (exige usuario),
+// así que deduplicamos los reintentos del webhook en memoria.
+const recentUnknownWamids = new Set<string>();
+
+function seenUnknown(wamid: string): boolean {
+  if (recentUnknownWamids.has(wamid)) return true;
+  recentUnknownWamids.add(wamid);
+  if (recentUnknownWamids.size > 1000) recentUnknownWamids.delete(recentUnknownWamids.values().next().value!);
+  return false;
+}
+
+export function senderPhone(event: InboundEvent): string {
+  return normalizePhone(event.message.from ?? event.conversation?.phone_number ?? "");
+}
 
 export async function handleInbound(event: InboundEvent): Promise<void> {
   const { message } = event;
-  const from = (message.from ?? event.conversation?.phone_number ?? "").replace(/\D/g, "");
-  if (from !== config.OWNER_PHONE) {
-    console.warn(`[inbound] mensaje de un número no autorizado (${from || "sin número"}), ignorado`);
+  const phone = senderPhone(event);
+  if (!phone) {
+    console.warn("[inbound] mensaje sin número de origen, ignorado");
     return;
   }
 
-  let user = await ensureOwner(config.OWNER_PHONE, config.OWNER_TIMEZONE, config.OWNER_CURRENCY);
-
+  const now = new Date();
   const text = message.text?.body ?? message.kapso?.transcript?.text ?? null;
+  const code = text ? findCode(text) : null;
+  let user = await findUserByPhone(phone);
+
+  // Alguien sin cuenta: o viene a registrarse con su código, o le mandamos el link.
+  if (!user) {
+    if (seenUnknown(message.id)) return;
+    await markReadWithTyping(message.id);
+    if (code) {
+      await handleAuthCode(code, phone, undefined, message.id, now);
+    } else {
+      await sendText(
+        { phone, lastInboundAt: now },
+        `¡Hola! 👋 Soy Luke, te ayudo a registrar tus gastos por WhatsApp.\n\nPara empezar, crea tu cuenta acá: ${config.PUBLIC_URL}/registro`,
+        { replyTo: message.id },
+      );
+    }
+    return;
+  }
+
   const [logged] = await db
     .insert(messages)
     .values({ wamid: message.id, userId: user.id, direction: "inbound", type: message.type, body: text })
@@ -39,17 +73,17 @@ export async function handleInbound(event: InboundEvent): Promise<void> {
     .returning();
   if (!logged) return; // Webhook repetido: ya lo procesamos.
 
-  user = await touchInbound(user, new Date());
+  user = await touchInbound(user, now);
   await markReadWithTyping(message.id);
-
-  const quotedTxId = await quotedTransaction(message.context?.id);
 
   try {
     const button = message.interactive?.button_reply;
-    if (button) {
+    if (code) {
+      await handleAuthCode(code, phone, user, message.id, now);
+    } else if (button) {
       await handleButton(user, button.id);
     } else if (text) {
-      await handleText(user, text, quotedTxId, message.id);
+      await handleText(user, text, await quotedTransaction(user.id, message.context?.id), message.id);
     } else if (message.type === "audio") {
       await sendText(user, "No pude transcribir el audio 😕 ¿Me lo escribes?", { replyTo: message.id });
     } else {
@@ -65,14 +99,18 @@ export async function handleInbound(event: InboundEvent): Promise<void> {
   await flushQueuedQuestions(user);
 }
 
-async function quotedTransaction(wamid: string | undefined): Promise<number | null> {
+async function quotedTransaction(userId: number, wamid: string | undefined): Promise<number | null> {
   if (!wamid) return null;
-  const row = await db.query.messages.findFirst({ where: eq(messages.wamid, wamid) });
+  const row = await db.query.messages.findFirst({ where: and(eq(messages.wamid, wamid), eq(messages.userId, userId)) });
   return row?.transactionId ?? null;
 }
 
 async function handleButton(user: User, buttonId: string) {
   const [action, rawId] = buttonId.split(":");
+  if (action === "auth_ok" || action === "auth_no") {
+    await confirmAuth(user, Number(rawId), action === "auth_ok");
+    return;
+  }
   const tx = await getTransaction(user.id, Number(rawId));
   if (!tx) {
     await sendText(user, "No encontré ese gasto, puede que lo hayas borrado.");
@@ -96,6 +134,8 @@ async function handleText(user: User, text: string, quotedTxId: number | null, r
   const fmtAmount = (tx: Transaction) => `${formatMoney(tx.amountMinor, tx.currency)} ${tx.currency}`;
 
   const interpretation = await interpretMessage(text, {
+    userName: user.name,
+    timezone: user.timezone,
     today: localDate(new Date(), user.timezone),
     defaultCurrency: user.currency,
     pending: pending.map((tx) => ({

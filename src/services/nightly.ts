@@ -1,27 +1,35 @@
 import { eq } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
-import { users } from "../db/schema.js";
+import { users, type User } from "../db/schema.js";
 import { formatMoney } from "../lib/money.js";
 import { isWindowOpen, localDate, localHour } from "../lib/time.js";
 import { sendText } from "../whatsapp.js";
 import { flushQueuedQuestions } from "./ask.js";
-import { emoji, formatSummary, getOwner, markAsked, pendingTransactions, summarize } from "./expenses.js";
+import { emoji, formatSummary, markAsked, pendingTransactions, summarize } from "./expenses.js";
 
 /**
- * Se ejecuta cada 15 minutos; envía el resumen una vez al día cuando ya pasó la
- * hora configurada. Así sobrevive a reinicios del servidor sin duplicarse.
+ * Se ejecuta cada 15 minutos; a cada usuario le envía el resumen una vez al día,
+ * cuando ya pasó la hora configurada en su zona horaria. Así sobrevive a
+ * reinicios del servidor sin duplicarse.
  */
 export async function runNightly(now = new Date()): Promise<void> {
-  const user = await getOwner(config.OWNER_PHONE);
-  if (!user) return;
+  const all = await db.query.users.findMany();
+  for (const user of all) {
+    try {
+      await nightlyFor(user, now);
+    } catch (err) {
+      console.error(`[nightly] falló para el usuario ${user.id}`, err);
+    }
+  }
+}
 
+async function nightlyFor(user: User, now: Date): Promise<void> {
   const today = localDate(now, user.timezone);
   if (localHour(now, user.timezone) < config.NIGHTLY_HOUR || user.lastNightlyOn === today) return;
 
   if (!isWindowOpen(user.lastInboundAt, now)) {
     // Sin plantillas (sandbox) no podemos escribir fuera de la ventana de 24 h.
-    console.warn("[nightly] ventana de 24 h cerrada; se omite el resumen de hoy");
     await db.update(users).set({ lastNightlyOn: today }).where(eq(users.id, user.id));
     return;
   }

@@ -4,7 +4,9 @@ import { db } from "../db/client.js";
 import { transactions, type Transaction, type User } from "../db/schema.js";
 import { parseAmount } from "../lib/money.js";
 import { suggestCategory } from "../llm.js";
+import { sendText } from "../whatsapp.js";
 import { askAbout } from "./ask.js";
+import { markApplePayConnected } from "./users.js";
 
 export const ApplePayPayload = z.object({
   amount: z.union([z.string(), z.number()]).transform(String),
@@ -39,7 +41,7 @@ export async function ingestApplePay(user: User, payload: z.infer<typeof ApplePa
   });
   if (duplicate) return { status: "duplicate", transaction: duplicate };
 
-  const category = await suggestCategory(payload.merchant);
+  const category = await suggestCategory(payload.merchant, user.timezone);
   const [tx] = await db
     .insert(transactions)
     .values({
@@ -54,6 +56,11 @@ export async function ingestApplePay(user: User, payload: z.infer<typeof ApplePa
       raw: payload,
     })
     .returning();
+
+  // Primera compra: confirmamos que el Atajo quedó bien configurado.
+  if (await markApplePayConnected(user.id)) {
+    await sendText(user, "🎉 ¡Tu Apple Pay quedó conectado! Desde ahora te voy a preguntar por cada compra.");
+  }
 
   // Si la ventana de 24 h está cerrada, la pregunta queda en cola (askedAt = null).
   const asked = await askAbout(user, tx!);

@@ -1,25 +1,36 @@
 import { z } from "zod";
 
+const optional = z
+  .string()
+  .optional()
+  .transform((v) => (v ? v : undefined));
+
 const Env = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().min(1),
+  // URL pública de la app (links de WhatsApp, cookies seguras, chequeo CSRF).
+  PUBLIC_URL: z.string().url().optional(),
 
   KAPSO_API_KEY: z.string().min(1),
   KAPSO_PHONE_NUMBER_ID: z.string().min(1),
   KAPSO_WEBHOOK_SECRET: z.string().min(1),
   KAPSO_BASE_URL: z.string().default("https://app.kapso.ai/api/meta/"),
+  // Número de WhatsApp de Luke, solo dígitos, para los links wa.me del registro.
+  WHATSAPP_BOT_NUMBER: z.string().regex(/^\d{8,15}$/, "Número sin '+', solo dígitos"),
 
   LLM_MODEL: z.string().default("claude-opus-5"),
 
-  OWNER_PHONE: z.string().regex(/^\d{8,15}$/, "Número sin '+', solo dígitos"),
-  OWNER_TIMEZONE: z.string().default("Australia/Sydney"),
-  OWNER_CURRENCY: z.string().length(3).default("AUD"),
-  APPLE_PAY_TOKEN: z.string().min(16, "Usa un token largo (openssl rand -hex 24)"),
-
+  // Tope de cuentas mientras el registro sea abierto (protege costos de Meta y Claude).
+  MAX_USERS: z.coerce.number().int().positive().default(20),
   NIGHTLY_HOUR: z.coerce.number().int().min(0).max(23).default(21),
+
+  // Legado del MVP de un solo usuario: si están definidas, al arrancar se asocia
+  // ese token de Apple Pay a la cuenta de ese número, para no reconfigurar el Atajo.
+  OWNER_PHONE: optional,
+  APPLE_PAY_TOKEN: optional,
 });
 
-export type Config = z.infer<typeof Env>;
+export type Config = z.infer<typeof Env> & { PUBLIC_URL: string };
 
 export const config: Config = (() => {
   const parsed = Env.safeParse(process.env);
@@ -27,5 +38,6 @@ export const config: Config = (() => {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Variables de entorno inválidas (revisa .env):\n${issues}`);
   }
-  return parsed.data;
+  const env = parsed.data;
+  return { ...env, PUBLIC_URL: (env.PUBLIC_URL ?? `http://localhost:${env.PORT}`).replace(/\/$/, "") };
 })();

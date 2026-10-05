@@ -1,26 +1,9 @@
 import { and, asc, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { CATEGORY_EMOJI, isCategory } from "../categories.js";
 import { db } from "../db/client.js";
-import { transactions, users, type Transaction, type User } from "../db/schema.js";
+import { transactions, type Transaction, type User } from "../db/schema.js";
 import { formatMoney } from "../lib/money.js";
 import { localDate, periodRange, type Period } from "../lib/time.js";
-
-export async function getOwner(phone: string): Promise<User | undefined> {
-  return db.query.users.findFirst({ where: eq(users.phone, phone) });
-}
-
-export async function ensureOwner(phone: string, timezone: string, currency: string): Promise<User> {
-  await db.insert(users).values({ phone, timezone, currency }).onConflictDoUpdate({
-    target: users.phone,
-    set: { timezone, currency },
-  });
-  return (await getOwner(phone))!;
-}
-
-export async function touchInbound(user: User, at: Date): Promise<User> {
-  const [updated] = await db.update(users).set({ lastInboundAt: at }).where(eq(users.id, user.id)).returning();
-  return updated!;
-}
 
 export function emoji(category: string): string {
   return isCategory(category) ? CATEGORY_EMOJI[category] : "📦";
