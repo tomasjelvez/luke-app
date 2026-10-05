@@ -30,7 +30,7 @@ export function LandingPage() {
 export function SignupPage() {
   const script = `
     document.getElementById("tz").value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    document.getElementById("signup").addEventListener("submit", async (e) => {
+    document.getElementById("step-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target, btn = f.querySelector("button"), err = document.getElementById("form-error");
       btn.disabled = true; err.textContent = "";
@@ -44,7 +44,7 @@ export function SignupPage() {
     <Layout title="Crear cuenta · Luke">
       <h1>Crea tu cuenta</h1>
       <p class="muted">Toma un minuto. Después conectamos tu Apple Pay.</p>
-      <form id="step-form" class="card">
+      <form id="step-form" class="card" method="post">
         <label for="name">¿Cómo te llamas?</label>
         <input id="name" name="name" autocomplete="given-name" required maxlength={40} />
         <label for="currency">Moneda principal</label>
@@ -158,7 +158,7 @@ export function AccountPage(props: { user: User; month: PeriodSummary }) {
         )}
       </section>
 
-      <form id="profile" class="card">
+      <form id="profile" class="card" method="post">
         <h2>Tus datos</h2>
         <label for="name">Nombre</label>
         <input id="name" name="name" value={user.name ?? ""} required maxlength={40} />
