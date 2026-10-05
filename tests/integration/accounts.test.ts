@@ -196,6 +196,22 @@ describe("Apple Pay por usuario", () => {
     expect((await pay(second)).status).toBe(200);
   });
 
+  it("acepta la entrada cruda del Atajo compartido y extrae la compra", async () => {
+    const cookie = await signUp(ANA);
+    const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
+    const res = await post("/ingest/apple-pay", { raw: "Ampol A$45.05 Debit Mastercard" }, { Authorization: `Bearer ${token}` });
+    expect(await res.json()).toMatchObject({ status: "created" });
+    const [tx] = await db.query.transactions.findMany();
+    expect(tx).toMatchObject({ amountMinor: 4505, currency: "AUD", merchant: "Ampol", status: "pending" });
+  });
+
+  it("rechaza un pago sin monto ni entrada cruda", async () => {
+    const cookie = await signUp(ANA);
+    const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
+    const res = await post("/ingest/apple-pay", { merchant: "", amount: "" }, { Authorization: `Bearer ${token}` });
+    expect(res.status).toBe(400);
+  });
+
   it("el token heredado del MVP sigue funcionando para su dueño", async () => {
     await createUser("56911111111", { name: "Dueño", currency: "AUD", timezone: "Australia/Sydney" });
     await bootstrapLegacyOwner();

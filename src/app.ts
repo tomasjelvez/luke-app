@@ -59,7 +59,7 @@ app.post("/ingest/apple-pay", async (c) => {
   if (!body.success) return c.json({ error: "payload inválido", issues: body.error.issues }, 400);
 
   const result = await ingestApplePay(user, body.data);
-  if (result.status === "invalid_amount") return c.json({ error: `monto no reconocido: ${body.data.amount}` }, 422);
+  if (result.status === "invalid_amount") return c.json({ error: `monto no reconocido: ${body.data.amount ?? "(desde raw)"}` }, 422);
   return c.json({ status: result.status, id: result.transaction.id, ...(result.status === "created" && { asked: result.asked }) });
 });
 

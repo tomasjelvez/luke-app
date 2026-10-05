@@ -19,4 +19,5 @@ export const whatsappMock = {
 export const llmMock = {
   suggestCategory: vi.fn(async () => "Otros"),
   interpretMessage: vi.fn(async () => ({ actions: [], reply: "ok" })),
+  extractPurchase: vi.fn(async () => ({ amount: 45.05, currency: null, merchant: "Ampol", card: "Debit Mastercard" })),
 };

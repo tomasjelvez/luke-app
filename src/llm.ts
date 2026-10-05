@@ -120,3 +120,33 @@ export async function suggestCategory(merchant: string, timezone: string): Promi
     return "Otros";
   }
 }
+
+// --- Extraer la compra desde la entrada cruda del Atajo ----------------------
+
+const ExtractedPurchase = z.object({
+  amount: z.number().nullable().describe("Monto en unidades normales (45.05 = cuarenta y cinco con cinco)."),
+  currency: z.string().nullable().describe("Código ISO 4217 si se puede deducir; si no, null."),
+  merchant: z.string().nullable().describe("Nombre del comercio tal como aparece, sin ciudad ni códigos si es posible."),
+  card: z.string().nullable().describe("Nombre de la tarjeta o pase, si aparece."),
+});
+
+export type ExtractedPurchase = z.infer<typeof ExtractedPurchase>;
+
+/**
+ * El Atajo compartido no puede leer las propiedades del pago, así que manda la
+ * entrada completa como texto. Acá sacamos monto, moneda y comercio.
+ */
+export async function extractPurchase(raw: string, defaultCurrency: string): Promise<ExtractedPurchase | null> {
+  const response = await client.messages.parse({
+    model: config.LLM_MODEL,
+    max_tokens: 16000,
+    output_config: { effort: "low", format: zodOutputFormat(ExtractedPurchase) },
+    system:
+      "Recibes el texto que entrega la app Atajos de iOS al pagar con Apple Pay (una transacción de Wallet convertida a texto). " +
+      `Extrae el monto, la moneda, el comercio y la tarjeta. Si la moneda no es explícita, usa null (se asumirá ${defaultCurrency}). ` +
+      "No inventes datos: si algo no aparece, devuelve null.",
+    messages: [{ role: "user", content: raw.slice(0, 4000) }],
+  });
+  if (response.stop_reason === "refusal") return null;
+  return response.parsed_output ?? null;
+}
