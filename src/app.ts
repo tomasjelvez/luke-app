@@ -55,8 +55,15 @@ app.post("/ingest/apple-pay", async (c) => {
   const user = token ? await findUserByApplePayToken(token) : undefined;
   if (!user) return c.json({ error: "token inválido" }, 401);
 
-  const body = ApplePayPayload.safeParse(await c.req.json().catch(() => null));
-  if (!body.success) return c.json({ error: "payload inválido", issues: body.error.issues }, 400);
+  const json: unknown = await c.req.json().catch(() => null);
+  const body = ApplePayPayload.safeParse(json);
+  if (!body.success) {
+    // Diagnóstico: qué campos mandó el Atajo y de qué tipo (el token va en el header, no se registra).
+    const fields = json && typeof json === "object" ? Object.entries(json).map(([k, v]) => `${k}:${Array.isArray(v) ? "array" : typeof v}`) : [typeof json];
+    const raw = json && typeof json === "object" && "raw" in json ? JSON.stringify((json as { raw: unknown }).raw).slice(0, 300) : "-";
+    console.warn(`[apple-pay] payload rechazado (usuario ${user.id}) campos=[${fields.join(", ")}] raw=${raw}`);
+    return c.json({ error: "payload inválido", issues: body.error.issues }, 400);
+  }
 
   const result = await ingestApplePay(user, body.data);
   if (result.status === "invalid_amount") return c.json({ error: `monto no reconocido: ${body.data.amount ?? "(desde raw)"}` }, 422);
