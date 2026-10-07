@@ -2,12 +2,13 @@ import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import { config } from "./config.js";
 import { api } from "./http/api.js";
-import { sessionMiddleware, type AppEnv } from "./http/session.js";
+import { clientIp, sessionMiddleware, type AppEnv } from "./http/session.js";
 import { extractEvents } from "./lib/kapsoPayload.js";
+import { createRateLimiter } from "./lib/rateLimit.js";
 import { verifyKapsoSignature } from "./lib/signature.js";
 import { ApplePayPayload, ingestApplePay } from "./services/applePay.js";
 import { handleInbound, senderPhone } from "./services/inbound.js";
-import { findUserByApplePayToken } from "./services/users.js";
+import { claimApplePaySetupCode, findUserByApplePayToken } from "./services/users.js";
 import { web } from "./web/routes.js";
 
 export const app = new Hono<AppEnv>();
@@ -69,6 +70,30 @@ app.post("/ingest/apple-pay", async (c) => {
   if (result.status === "invalid_amount") return c.json({ error: `monto no reconocido: ${body.data.amount ?? "(desde raw)"}` }, 422);
   return c.json({ status: result.status, id: result.transaction.id, ...(result.status === "created" && { asked: result.asked }) });
 });
+
+// El Atajo compartido canjea el código de conexión (que le pasó la web) por su token personal.
+const connectLimit = createRateLimiter(20, 15 * 60 * 1000);
+app.post("/ingest/apple-pay/connect", async (c) => {
+  if (!connectLimit(clientIp(c))) return c.json({ error: "Demasiados intentos, espera unos minutos." }, 429);
+  const json: unknown = await c.req.json().catch(() => null);
+  const code = json && typeof json === "object" && "code" in json && typeof json.code === "string" ? json.code : "";
+  const claimed = code ? await claimApplePaySetupCode(code) : undefined;
+  if (!claimed) {
+    return c.json({ error: `Ese código no sirve o ya venció. Genera uno nuevo en ${config.PUBLIC_URL}/cuenta/apple-pay` }, 400);
+  }
+  const { user, token } = claimed;
+  const owner = [user.name, `+${maskPhone(user.phone)}`].filter(Boolean).join(" · ");
+  return c.json({
+    authorization: `Bearer ${token}`,
+    // El Atajo lo muestra antes de guardar el token, para que nadie conecte tu iPhone a otra cuenta.
+    confirm: `¿Conectar este iPhone con la cuenta de Luke de ${owner}?`,
+    message: "¡Listo! 🎉 Ahora crea la automatización de Wallet (el último paso en la página de Luke).",
+  });
+});
+
+function maskPhone(phone: string): string {
+  return phone.slice(0, 2) + "•".repeat(Math.max(0, phone.length - 6)) + phone.slice(-4);
+}
 
 // Web y API comparten la sesión (cookie en la web, Bearer en la app móvil).
 app.use("/api/*", csrf({ origin: config.PUBLIC_URL }), sessionMiddleware);

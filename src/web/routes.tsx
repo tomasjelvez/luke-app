@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { config } from "../config.js";
 import { applePaySetup } from "../http/api.js";
 import type { AppEnv } from "../http/session.js";
 import { summarize } from "../services/expenses.js";
@@ -19,5 +20,12 @@ web.get("/cuenta", async (c) => {
 web.get("/cuenta/apple-pay", (c) => {
   const user = c.get("user");
   if (!user) return c.redirect("/entrar");
-  return c.html(<ApplePayPage user={user} url={applePaySetup().url} />);
+  return c.html(
+    <ApplePayPage
+      user={user}
+      url={applePaySetup().url}
+      shortcutUrl={config.APPLE_PAY_SHORTCUT_URL}
+      shortcutName={config.APPLE_PAY_SHORTCUT_NAME}
+    />,
+  );
 });

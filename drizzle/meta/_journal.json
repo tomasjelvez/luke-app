@@ -15,6 +15,13 @@
       "when": 1791184623991,
       "tag": "0001_multiuser",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791360392552,
+      "tag": "0002_apple_pay_setup",
+      "breakpoints": true
     }
   ]
 }

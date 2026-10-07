@@ -186,9 +186,23 @@ export function AccountPage(props: { user: User; month: PeriodSummary }) {
   );
 }
 
-export function ApplePayPage(props: { user: User; url: string }) {
-  const { user, url } = props;
+export function ApplePayPage(props: { user: User; url: string; shortcutUrl?: string; shortcutName: string }) {
+  const { user, url, shortcutUrl, shortcutName } = props;
   const script = `
+    document.getElementById("connect")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget, err = document.getElementById("connect-error");
+      btn.disabled = true; err.textContent = "";
+      try {
+        const r = await postJSON("/api/me/apple-pay-setup");
+        document.getElementById("setup-code").textContent = r.code;
+        document.getElementById("setup-box").hidden = false;
+        document.getElementById("connected").hidden = true;
+        document.getElementById("waiting").hidden = false;
+        waitForConnection(Date.now());
+        location.href = r.runUrl;
+      } catch (e) { err.textContent = e.message; }
+      btn.disabled = false;
+    });
     document.getElementById("gen").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       if (btn.dataset.existing === "1" && !confirm("El token anterior dejará de funcionar y tendrás que actualizar tu Atajo. ¿Continuar?")) return;
@@ -198,13 +212,18 @@ export function ApplePayPage(props: { user: User; url: string }) {
         document.getElementById("auth-value").textContent = r.authorization;
         document.getElementById("token-box").hidden = false;
         btn.hidden = true;
-        waitForConnection();
+        waitForConnection(Date.now());
       } catch (e) { alert(e.message); btn.disabled = false; }
     });
-    function waitForConnection() {
+    // Espera la primera compra recibida después de "since" (no una conexión anterior).
+    let waitingSince = null;
+    function waitForConnection(since) {
+      const running = waitingSince !== null;
+      waitingSince = since;
+      if (running) return;
       const tick = async () => {
         const me = await fetch("/api/me").then((r) => r.json()).catch(() => null);
-        if (me && me.applePay.connectedAt) {
+        if (me && me.applePay.connectedAt && Date.parse(me.applePay.connectedAt) >= waitingSince) {
           document.getElementById("waiting").hidden = true;
           document.getElementById("connected").hidden = false;
           return;
@@ -213,19 +232,19 @@ export function ApplePayPage(props: { user: User; url: string }) {
       };
       tick();
     }
-    if (${user.applePayTokenHash !== null && !user.applePayConnectedAt}) waitForConnection();`;
+    if (${user.applePayTokenHash !== null && !user.applePayConnectedAt}) waitForConnection(0);`;
 
   return (
     <Layout title="Apple Pay · Luke" loggedIn>
       <h1>Conecta tu Apple Pay</h1>
       <p class="muted">
-        Creas una automatización en la app Atajos del iPhone (una sola vez). Cada vez que pagues con Apple Pay, el
-        iPhone le avisa a Luke y Luke te pregunta qué fue.
+        Se configura una sola vez desde tu iPhone. Cada vez que pagues con Apple Pay, el iPhone le avisa a Luke y Luke
+        te pregunta qué fue.
       </p>
 
       <section id="connected" class="card ok" hidden={!user.applePayConnectedAt}>
         <h2>✅ ¡Conectado!</h2>
-        <p class="small" style="margin:0">Luke ya recibe tus compras. Puedes borrar la acción “Show Notification” del Atajo.</p>
+        <p class="small" style="margin:0">Luke ya recibe tus compras.</p>
       </section>
       <section id="waiting" class="card warn" hidden={!!user.applePayConnectedAt}>
         <p class="status small" style="margin:0">
@@ -234,79 +253,143 @@ export function ApplePayPage(props: { user: User; url: string }) {
         </p>
       </section>
 
-      <section class="card">
-        <h2>1. Tu token personal</h2>
-        <p class="small muted">
-          Es la llave para que tu iPhone le envíe tus compras a tu cuenta. No lo compartas.
-          {user.applePayTokenHash && " Ya tienes uno configurado; genera uno nuevo solo si lo perdiste."}
-        </p>
-        <button id="gen" class="btn" type="button" data-existing={user.applePayTokenHash ? "1" : "0"}>
-          {user.applePayTokenHash ? "Generar un token nuevo" : "Generar mi token"}
-        </button>
-        <div id="token-box" hidden>
-          <label>Header “Authorization”</label>
-          <CopyField id="auth-value" value="" />
-          <p class="small muted">Se muestra una sola vez. Si lo pierdes, genera otro.</p>
-        </div>
-        <label>URL</label>
-        <CopyField id="url-value" value={url} />
-      </section>
+      {shortcutUrl && (
+        <>
+          <section class="card">
+            <h2>1. Agrega el Atajo de Luke</h2>
+            <p class="small muted">Ábrelo en tu iPhone y toca <span class="k">Add Shortcut</span> <span class="alt">(Agregar atajo)</span>.</p>
+            <a class="btn" href={shortcutUrl} target="_blank" rel="noopener">
+              Agregar el Atajo
+            </a>
+          </section>
 
-      <section class="card">
-        <h2>2. Crea la automatización</h2>
-        <p class="small muted">Te mostramos los nombres en inglés y, al lado, en español.</p>
-        <ol class="steps">
-          <li>
-            Abre <span class="k">Shortcuts</span> <span class="alt">(Atajos)</span> → pestaña{" "}
-            <span class="k">Automation</span> <span class="alt">(Automatización)</span> → <span class="k">+</span>.
-          </li>
-          <li>
-            Elige <span class="k">Wallet</span> <span class="alt">(o “Transacción”)</span>. Deja todas tus tarjetas y
-            categorías marcadas → <span class="k">Next</span>.
-          </li>
-          <li>
-            Elige <span class="k">Run Immediately</span> <span class="alt">(Ejecutar inmediatamente)</span> y desactiva{" "}
-            <span class="k">Notify When Run</span> → <span class="k">Next</span> →{" "}
-            <span class="k">New Blank Shortcut</span>.
-          </li>
-          <li>
-            Agrega la acción <span class="k">URL</span> y pega la <span class="k">URL</span> de arriba.
-          </li>
-          <li>
-            Agrega debajo <span class="k">Get Contents of URL</span>{" "}
-            <span class="alt">(Obtener contenido de URL)</span> y toca la flechita para ver las opciones:
-            <ul>
+          <section class="card">
+            <h2>2. Conéctalo con tu cuenta</h2>
+            <p class="small muted">
+              Se abrirá el Atajo: confirma que es tu cuenta y listo. No tienes que copiar nada.
+              {user.applePayTokenHash && " Si ya lo tenías conectado en otro iPhone, ese dejará de enviar compras."}
+            </p>
+            <button id="connect" class="btn" type="button">
+              Conectar mi iPhone
+            </button>
+            <p class="error" id="connect-error"></p>
+            <div id="setup-box" hidden>
+              <p class="small muted">
+                ¿No se abrió? Copia este código, abre el Atajo <span class="k">{shortcutName}</span> en la app Atajos y
+                pégalo cuando te lo pida. Vence en 10 minutos.
+              </p>
+              <CopyField id="setup-code" value="" />
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>3. Crea la automatización</h2>
+            <p class="small muted">
+              Apple no deja instalar este paso desde un link, pero es corto. Te mostramos los nombres en inglés y, al
+              lado, en español.
+            </p>
+            <ol class="steps">
               <li>
-                <span class="k">Method</span>: POST
+                Abre <span class="k">Shortcuts</span> <span class="alt">(Atajos)</span> → pestaña 
+                <span class="k">Automation</span> <span class="alt">(Automatización)</span> → <span class="k">+</span>.
               </li>
               <li>
-                <span class="k">Headers</span> → Add new header: clave <code>Authorization</code>, valor: pega tu token
-                (empieza con <code>Bearer</code>).
+                Elige <span class="k">Wallet</span>. Deja todas tus tarjetas y categorías marcadas → 
+                <span class="k">Next</span> <span class="alt">(Siguiente)</span>.
               </li>
               <li>
-                <span class="k">Request Body</span>: JSON, con 3 campos de tipo Text. En cada uno elige la variable{" "}
-                <span class="k">Shortcut Input</span>, tócala y elige la propiedad:
-                <ul>
-                  <li>
-                    <code>amount</code> → <span class="k">Amount</span>
-                  </li>
-                  <li>
-                    <code>merchant</code> → <span class="k">Merchant</span>
-                  </li>
-                  <li>
-                    <code>card</code> → <span class="k">Card or Pass</span>
-                  </li>
-                </ul>
+                Elige <span class="k">Run Immediately</span> <span class="alt">(Ejecutar inmediatamente)</span> → 
+                <span class="k">Next</span>.
               </li>
-            </ul>
-          </li>
-          <li>
-            Para probar, agrega <span class="k">Show Notification</span> con la variable{" "}
-            <span class="k">Contents of URL</span>. Toca ✓.
-          </li>
-          <li>Paga algo con Apple Pay: deberías recibir el mensaje de Luke en WhatsApp.</li>
-        </ol>
-      </section>
+              <li>
+                Busca <span class="k">Run Shortcut</span> <span class="alt">(Ejecutar atajo)</span>, agrégala y en 
+                <span class="k">Shortcut</span> elige <span class="k">{shortcutName}</span>.
+              </li>
+              <li>
+                Toca la flechita de la acción → <span class="k">Input</span> <span class="alt">(Entrada)</span> → elige 
+                <span class="k">Shortcut Input</span> <span class="alt">(Entrada del atajo)</span>. Toca 
+                <span class="k">Done</span>.
+              </li>
+              <li>Mándale un mensaje a Luke por WhatsApp y paga algo con Apple Pay: Luke te preguntará qué fue.</li>
+            </ol>
+          </section>
+        </>
+      )}
+
+      <details class="manual" open={!shortcutUrl}>
+        <summary class="small muted">Configuración manual (sin el Atajo compartido)</summary>
+        <section class="card">
+          <h2>1. Tu token personal</h2>
+          <p class="small muted">
+            Es la llave para que tu iPhone le envíe tus compras a tu cuenta. No lo compartas.
+            {user.applePayTokenHash && " Ya tienes uno configurado; genera uno nuevo solo si lo perdiste."}
+          </p>
+          <button id="gen" class="btn" type="button" data-existing={user.applePayTokenHash ? "1" : "0"}>
+            {user.applePayTokenHash ? "Generar un token nuevo" : "Generar mi token"}
+          </button>
+          <div id="token-box" hidden>
+            <label>Header “Authorization”</label>
+            <CopyField id="auth-value" value="" />
+            <p class="small muted">Se muestra una sola vez. Si lo pierdes, genera otro.</p>
+          </div>
+          <label>URL</label>
+          <CopyField id="url-value" value={url} />
+        </section>
+
+        <section class="card">
+          <h2>2. Crea la automatización</h2>
+          <p class="small muted">Te mostramos los nombres en inglés y, al lado, en español.</p>
+          <ol class="steps">
+            <li>
+              Abre <span class="k">Shortcuts</span> <span class="alt">(Atajos)</span> → pestaña{" "}
+              <span class="k">Automation</span> <span class="alt">(Automatización)</span> → <span class="k">+</span>.
+            </li>
+            <li>
+              Elige <span class="k">Wallet</span>. Deja todas tus tarjetas y categorías marcadas →{" "}
+              <span class="k">Next</span> <span class="alt">(Siguiente)</span>.
+            </li>
+            <li>
+              Elige <span class="k">Run Immediately</span> <span class="alt">(Ejecutar inmediatamente)</span> →{" "}
+              <span class="k">Next</span> → <span class="k">New Blank Shortcut</span>{" "}
+              <span class="alt">(Nuevo atajo en blanco)</span>.
+            </li>
+            <li>
+              Toca <span class="k">Search Actions</span>, busca <span class="k">Get Contents of URL</span>{" "}
+              <span class="alt">(Obtener contenido de URL)</span> y agrégala.
+            </li>
+            <li>
+              Toca <span class="k">URL</span> dentro de la acción y pega la <span class="k">URL</span> de arriba.
+            </li>
+            <li>
+              Toca la flechita al lado de la acción para ver las opciones:
+              <ul>
+                <li>
+                  <span class="k">Method</span>: <span class="k">POST</span>
+                </li>
+                <li>
+                  <span class="k">Headers</span> → <span class="k">Add new header</span>: clave{" "}
+                  <code>Authorization</code>, valor: pega tu token (empieza con <code>Bearer</code>).
+                </li>
+                <li>
+                  <span class="k">Request Body</span>: <span class="k">JSON</span> →{" "}
+                  <span class="k">Add new field</span> → <span class="k">Text</span>: clave <code>raw</code>, valor: la
+                  variable <span class="k">Shortcut Input</span>. No elijas ninguna propiedad: déjala tal cual.
+                </li>
+              </ul>
+            </li>
+            <li>
+              Toca <span class="k">▶</span> una vez. Si te pregunta, elige <span class="k">Always Allow</span>{" "}
+              <span class="alt">(Permitir siempre)</span>. Verás un error porque no hubo pago: es normal.
+            </li>
+            <li>
+              Toca <span class="k">✓</span> y luego <span class="k">Done</span>.
+            </li>
+            <li>
+              Mándale un mensaje a Luke por WhatsApp y paga algo con Apple Pay: Luke te preguntará qué fue.
+            </li>
+          </ol>
+        </section>
+      </details>
       <script dangerouslySetInnerHTML={{ __html: script }} />
     </Layout>
   );

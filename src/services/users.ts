@@ -1,4 +1,4 @@
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, eq, gt, isNull } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { users, type SignupData, type User } from "../db/schema.js";
@@ -55,6 +55,35 @@ export async function rotateApplePayToken(userId: number): Promise<string> {
     .set({ applePayTokenHash: sha256(token), applePayConnectedAt: null })
     .where(eq(users.id, userId));
   return token;
+}
+
+const SETUP_TTL_MS = 10 * 60 * 1000;
+// Prefijo que el Atajo usa para distinguir un código de conexión de una compra.
+export const SETUP_CODE_PREFIX = "luke-setup-";
+
+/** Código de un solo uso que la web le pasa al Atajo compartido. Reemplaza al anterior. */
+export async function createApplePaySetupCode(userId: number, now = new Date()): Promise<{ code: string; expiresAt: Date }> {
+  const code = SETUP_CODE_PREFIX + randomToken(18);
+  const expiresAt = new Date(now.getTime() + SETUP_TTL_MS);
+  await db
+    .update(users)
+    .set({ applePaySetupHash: sha256(code), applePaySetupExpiresAt: expiresAt })
+    .where(eq(users.id, userId));
+  return { code, expiresAt };
+}
+
+/**
+ * Canjea el código de conexión por un token nuevo de Apple Pay (el anterior deja
+ * de funcionar). Atómico: un código sirve una sola vez.
+ */
+export async function claimApplePaySetupCode(code: string, now = new Date()): Promise<{ user: User; token: string } | undefined> {
+  const token = randomToken(24);
+  const [user] = await db
+    .update(users)
+    .set({ applePayTokenHash: sha256(token), applePayConnectedAt: null, applePaySetupHash: null, applePaySetupExpiresAt: null })
+    .where(and(eq(users.applePaySetupHash, sha256(code.trim())), gt(users.applePaySetupExpiresAt, now)))
+    .returning();
+  return user && { user, token };
 }
 
 /** Marca Apple Pay como conectado. Devuelve true solo la primera vez. */

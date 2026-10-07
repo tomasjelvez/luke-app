@@ -28,6 +28,9 @@ export const users = pgTable("users", {
   applePayTokenHash: text("apple_pay_token_hash").unique(),
   // Primera compra recibida por Apple Pay: confirma que el Atajo quedó bien configurado.
   applePayConnectedAt: timestamp("apple_pay_connected_at", { withTimezone: true }),
+  // Código de un solo uso para que el Atajo compartido obtenga el token sin que la persona lo pegue.
+  applePaySetupHash: text("apple_pay_setup_hash").unique(),
+  applePaySetupExpiresAt: timestamp("apple_pay_setup_expires_at", { withTimezone: true }),
   // Última vez que el usuario nos escribió: define la ventana de 24 h de WhatsApp.
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   // Fecha local (YYYY-MM-DD) del último resumen nocturno enviado, para no repetirlo.

@@ -212,6 +212,38 @@ describe("Apple Pay por usuario", () => {
     expect(res.status).toBe(400);
   });
 
+  it("el Atajo compartido canjea el código de conexión por un token, una sola vez", async () => {
+    const cookie = await signUp(ANA);
+    const oldToken = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
+    const setup = await (await post("/api/me/apple-pay-setup", {}, { cookie })).json();
+    expect(setup.code).toMatch(/^luke-setup-/);
+    expect(setup.runUrl).toBe(
+      `shortcuts://run-shortcut?name=Luke%20Apple%20Pay&input=text&text=${encodeURIComponent(setup.code)}`,
+    );
+
+    const res = await post("/ingest/apple-pay/connect", { code: setup.code });
+    const body = await res.json();
+    expect(body).toMatchObject({ authorization: expect.stringMatching(/^Bearer /), confirm: expect.stringContaining("Ana") });
+    expect(body.confirm).not.toContain(ANA); // el número va enmascarado
+
+    const pay = (authorization: string) => post("/ingest/apple-pay", { amount: "$5", merchant: "Cafe" }, { Authorization: authorization });
+    expect((await pay(body.authorization)).status).toBe(200);
+    expect((await pay(`Bearer ${oldToken}`)).status).toBe(401);
+
+    const again = await post("/ingest/apple-pay/connect", { code: setup.code });
+    expect(again.status).toBe(400);
+  });
+
+  it("rechaza códigos de conexión vencidos o inventados", async () => {
+    await signUp(ANA);
+    const { createApplePaySetupCode } = await import("../../src/services/users.js");
+    const ana = await userByPhone(ANA);
+    const { code } = await createApplePaySetupCode(ana.id, new Date(Date.now() - 11 * 60 * 1000));
+    expect((await post("/ingest/apple-pay/connect", { code })).status).toBe(400);
+    expect((await post("/ingest/apple-pay/connect", { code: "luke-setup-inventado" })).status).toBe(400);
+    expect((await post("/ingest/apple-pay/connect", {})).status).toBe(400);
+  });
+
   it("el token heredado del MVP sigue funcionando para su dueño", async () => {
     await createUser("56911111111", { name: "Dueño", currency: "AUD", timezone: "Australia/Sydney" });
     await bootstrapLegacyOwner();

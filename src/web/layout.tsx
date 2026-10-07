@@ -52,6 +52,8 @@ ol.steps li ul { margin: 6px 0 0; padding-left: 18px; }
 @keyframes pulse { 50% { opacity: .3; } }
 .row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .row:last-child { border-bottom: 0; }
+details.manual { margin-bottom: 16px; }
+details.manual > summary { cursor: pointer; padding: 8px 0 12px; }
 [hidden] { display: none !important; }
 `;
 

@@ -24,6 +24,10 @@ const Env = z.object({
   MAX_USERS: z.coerce.number().int().positive().default(20),
   NIGHTLY_HOUR: z.coerce.number().int().min(0).max(23).default(21),
 
+  // Atajo compartido de Apple Pay: link de iCloud y nombre exacto con que queda instalado.
+  APPLE_PAY_SHORTCUT_URL: z.string().url().optional(),
+  APPLE_PAY_SHORTCUT_NAME: z.string().min(1).default("Luke Apple Pay"),
+
   // Legado del MVP de un solo usuario: si están definidas, al arrancar se asocia
   // ese token de Apple Pay a la cuenta de ese número, para no reconfigurar el Atajo.
   OWNER_PHONE: optional,
