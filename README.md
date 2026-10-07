@@ -86,6 +86,10 @@ Apple no permite instalar la automatización de Wallet desde un link, así que e
 
 ### Crear el Atajo (una vez, quien administra Luke)
 
+**Automático (Mac):** `python3 shortcut/build.py https://<servidor>` genera el Atajo y `shortcuts sign --mode anyone -i shortcut/build/unsigned.shortcut -o "shortcut/build/Luke Apple Pay.shortcut"` lo firma. Ábrelo para importarlo y compártelo con **Copy iCloud Link**.
+
+**A mano**, si prefieres armarlo en el iPhone:
+
 En el iPhone, app **Atajos** → **+**, nómbralo exactamente `Luke Apple Pay` (o cambia `APPLE_PAY_SHORTCUT_NAME`). Reemplaza `<servidor>` por tu `PUBLIC_URL`.
 
 1. En los detalles del Atajo (ⓘ), activa que reciba entrada: **Receive Any input**. En **If there's no input** elige **Ask For** → **Text**. Así, si se abre a mano, pide pegar el código.
