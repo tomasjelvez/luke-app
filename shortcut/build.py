@@ -104,6 +104,31 @@ def get_value(key, var, out):
     return action("getvalueforkey", UUID=out, WFGetDictionaryValueType="Value", WFDictionaryKey=key, WFInput=attachment(var))
 
 
+def read_token():
+    """Get File de luke-token.txt; devuelve (acción, variable File)."""
+    out = uid()
+    return action(
+        "documentpicker.open",
+        UUID=out,
+        WFGetFilePath="luke-token.txt",
+        WFFileErrorIfNotFound=False,
+        WFShowFilePicker=False,
+    ), output(out, "File")
+
+
+def send_with_token(file_var, body):
+    """Envía `body` a /ingest/apple-pay con el token leído del archivo.
+
+    El header sale del archivo (no de la variable Token) a propósito: así iOS pide
+    el permiso de iCloud Drive, que no se puede conceder con el iPhone bloqueado.
+    """
+    text_out = uid()
+    return [
+        action("detect.text", UUID=text_out, WFInput=attachment(file_var)),
+        post(f"{SERVER}/ingest/apple-pay", body, headers=fields(Authorization=output(text_out, "Text")), out=uid()),
+    ]
+
+
 # --- El Atajo ---------------------------------------------------------------------
 actions = []
 
@@ -132,6 +157,10 @@ actions.append(action(
     WFFileDestinationPath="luke-token.txt",
     WFSaveFileOverwrite=True,
 ))
+# Envío de prueba: iOS pide aquí los permisos (con el iPhone desbloqueado), no en la primera compra.
+get_saved, saved_file = read_token()
+actions.append(get_saved)
+actions.extend(send_with_token(saved_file, fields(ping="1")))
 actions.append(alert("¡Listo! 🎉 Ahora crea la automatización de Wallet (último paso en la página de Luke)."))
 actions.append(otherwise(ok))
 error = uid()
@@ -143,29 +172,16 @@ actions.append(otherwise(setup))
 actions.append(end_if(setup))
 
 # B. Compra: lee el token guardado y manda la entrada completa del pago.
-token_file = uid()
-actions.append(action(
-    "documentpicker.open",
-    UUID=token_file,
-    WFGetFilePath="luke-token.txt",
-    WFFileErrorIfNotFound=False,
-    WFShowFilePicker=False,
-))
-missing, a = if_(output(token_file, "File"), NO_VALUE)
+get_file, token_file = read_token()
+actions.append(get_file)
+missing, a = if_(token_file, NO_VALUE)
 actions.append(a)
 actions.append(action("notification", WFNotificationActionTitle="Luke",
                       WFNotificationActionBody=f"Conecta tu iPhone en {SERVER}/cuenta/apple-pay"))
 actions.append(action("exit"))
 actions.append(otherwise(missing))
 actions.append(end_if(missing))
-token_text = uid()
-actions.append(action("detect.text", UUID=token_text, WFInput=attachment(output(token_file, "File"))))
-actions.append(post(
-    f"{SERVER}/ingest/apple-pay",
-    fields(raw=INPUT_TEXT),
-    headers=fields(Authorization=output(token_text, "Text")),
-    out=uid(),
-))
+actions.extend(send_with_token(token_file, fields(raw=INPUT_TEXT)))
 
 workflow = {
     "WFWorkflowClientVersion": "2607.0.2",

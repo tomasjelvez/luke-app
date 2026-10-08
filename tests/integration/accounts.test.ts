@@ -234,6 +234,16 @@ describe("Apple Pay por usuario", () => {
     expect(again.status).toBe(400);
   });
 
+  it("el envío de prueba del Atajo valida el token sin registrar gastos", async () => {
+    const cookie = await signUp(ANA);
+    const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
+    const ping = (authorization: string) => post("/ingest/apple-pay", { ping: "1" }, { Authorization: authorization });
+    expect(await (await ping(`Bearer ${token}`)).json()).toEqual({ status: "ok" });
+    expect((await ping("Bearer otro")).status).toBe(401);
+    expect(await db.query.transactions.findMany()).toHaveLength(0);
+    expect((await userByPhone(ANA)).applePayConnectedAt).toBeNull();
+  });
+
   it("rechaza códigos de conexión vencidos o inventados", async () => {
     await signUp(ANA);
     const { createApplePaySetupCode } = await import("../../src/services/users.js");

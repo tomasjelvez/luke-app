@@ -57,6 +57,8 @@ app.post("/ingest/apple-pay", async (c) => {
   if (!user) return c.json({ error: "token inválido" }, 401);
 
   const json: unknown = await c.req.json().catch(() => null);
+  // El Atajo hace un envío de prueba al conectarse, para que iOS pida sus permisos con el iPhone desbloqueado.
+  if (json && typeof json === "object" && "ping" in json) return c.json({ status: "ok" });
   const body = ApplePayPayload.safeParse(json);
   if (!body.success) {
     // Diagnóstico: qué campos mandó el Atajo y de qué tipo (el token va en el header, no se registra).
@@ -86,7 +88,7 @@ app.post("/ingest/apple-pay/connect", async (c) => {
   return c.json({
     authorization: `Bearer ${token}`,
     // El Atajo lo muestra antes de guardar el token, para que nadie conecte tu iPhone a otra cuenta.
-    confirm: `¿Conectar este iPhone con la cuenta de Luke de ${owner}?`,
+    confirm: `¿Conectar este iPhone con la cuenta de Luke de ${owner}?\n\nSi iOS te pide permisos, elige “Always Allow” (Permitir siempre).`,
     message: "¡Listo! 🎉 Ahora crea la automatización de Wallet (el último paso en la página de Luke).",
   });
 });
