@@ -186,20 +186,34 @@ export function AccountPage(props: { user: User; month: PeriodSummary }) {
   );
 }
 
-export function ApplePayPage(props: { user: User; url: string; shortcutUrl?: string; shortcutName: string }) {
-  const { user, url, shortcutUrl, shortcutName } = props;
+export function ApplePayPage(props: {
+  user: User;
+  url: string;
+  shortcutUrl?: string;
+  shortcutName: string;
+  runUrl: string;
+}) {
+  const { user, url, shortcutUrl, shortcutName, runUrl } = props;
   const script = `
     document.getElementById("connect")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget, err = document.getElementById("connect-error");
+      if (btn.dataset.existing === "1" && !confirm("Tu código anterior dejará de funcionar. ¿Continuar?")) return;
       btn.disabled = true; err.textContent = "";
+      const token = postJSON("/api/me/apple-pay-token").then((r) => r.token);
+      // Safari solo deja copiar durante el toque: le pasamos la promesa en vez de esperar la respuesta.
+      let copied = false;
       try {
-        const r = await postJSON("/api/me/apple-pay-setup");
-        document.getElementById("setup-code").textContent = r.code;
-        document.getElementById("setup-box").hidden = false;
+        await navigator.clipboard.write([new ClipboardItem({ "text/plain": token.then((t) => new Blob([t], { type: "text/plain" })) })]);
+        copied = true;
+      } catch {}
+      try {
+        document.getElementById("my-code").textContent = await token;
+        document.getElementById("code-box").hidden = false;
+        document.getElementById("copied").hidden = !copied;
         document.getElementById("connected").hidden = true;
         document.getElementById("waiting").hidden = false;
         waitForConnection(Date.now());
-        location.href = r.runUrl;
+        if (copied) location.href = btn.dataset.shortcut;
       } catch (e) { err.textContent = e.message; }
       btn.disabled = false;
     });
@@ -257,29 +271,41 @@ export function ApplePayPage(props: { user: User; url: string; shortcutUrl?: str
         <>
           <section class="card">
             <h2>1. Agrega el Atajo de Luke</h2>
-            <p class="small muted">Ábrelo en tu iPhone y toca <span class="k">Add Shortcut</span> <span class="alt">(Agregar atajo)</span>.</p>
-            <a class="btn" href={shortcutUrl} target="_blank" rel="noopener">
-              Agregar el Atajo
-            </a>
+            <p class="small muted">
+              El botón copia tu código personal y abre el Atajo. Toca <span class="k">Add Shortcut</span>{" "}
+              <span class="alt">(Agregar atajo)</span> y, cuando te lo pida, mantén presionado y elige{" "}
+              <span class="k">Paste</span> <span class="alt">(Pegar)</span>.
+              {user.applePayTokenHash && " Tu código anterior dejará de funcionar."}
+            </p>
+            <button
+              id="connect"
+              class="btn"
+              type="button"
+              data-shortcut={shortcutUrl}
+              data-existing={user.applePayTokenHash ? "1" : "0"}
+            >
+              Copiar mi código y agregar el Atajo
+            </button>
+            <p class="error" id="connect-error"></p>
+            <div id="code-box" hidden>
+              <p class="small muted" id="copied">✓ Copiado. Si el Atajo no se abrió, usa el link de abajo.</p>
+              <label>Tu código</label>
+              <CopyField id="my-code" value="" />
+              <a class="small" href={shortcutUrl} target="_blank" rel="noopener">
+                Abrir el Atajo
+              </a>
+            </div>
           </section>
 
           <section class="card">
-            <h2>2. Conéctalo con tu cuenta</h2>
+            <h2>2. Pruébalo</h2>
             <p class="small muted">
-              Se abrirá el Atajo: confirma que es tu cuenta y listo. No tienes que copiar nada.
-              {user.applePayTokenHash && " Si ya lo tenías conectado en otro iPhone, ese dejará de enviar compras."}
+              Deberías ver “✅ Conectado”. Si iOS te pide permiso, elige <span class="k">Always Allow</span>{" "}
+              <span class="alt">(Permitir siempre)</span>: así funciona aunque tu iPhone esté bloqueado.
             </p>
-            <button id="connect" class="btn" type="button">
-              Conectar mi iPhone
-            </button>
-            <p class="error" id="connect-error"></p>
-            <div id="setup-box" hidden>
-              <p class="small muted">
-                ¿No se abrió? Copia este código, abre el Atajo <span class="k">{shortcutName}</span> en la app Atajos y
-                pégalo cuando te lo pida. Vence en 10 minutos.
-              </p>
-              <CopyField id="setup-code" value="" />
-            </div>
+            <a class="btn secondary" href={runUrl}>
+              Probar conexión
+            </a>
           </section>
 
           <section class="card">

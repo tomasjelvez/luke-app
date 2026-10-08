@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { config } from "../config.js";
-import { applePaySetup } from "../http/api.js";
+import { applePaySetup, shortcutRunUrl } from "../http/api.js";
 import type { AppEnv } from "../http/session.js";
 import { summarize } from "../services/expenses.js";
 import { AccountPage, ApplePayPage, LandingPage, LoginPage, SignupPage } from "./pages.js";
@@ -26,6 +26,7 @@ web.get("/cuenta/apple-pay", (c) => {
       url={applePaySetup().url}
       shortcutUrl={config.APPLE_PAY_SHORTCUT_URL}
       shortcutName={config.APPLE_PAY_SHORTCUT_NAME}
+      runUrl={shortcutRunUrl()}
     />,
   );
 });

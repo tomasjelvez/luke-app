@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import { config } from "./config.js";
 import { api } from "./http/api.js";
-import { clientIp, sessionMiddleware, type AppEnv } from "./http/session.js";
+import { sessionMiddleware, type AppEnv } from "./http/session.js";
 import { extractEvents } from "./lib/kapsoPayload.js";
-import { createRateLimiter } from "./lib/rateLimit.js";
+import { formatMoney } from "./lib/money.js";
 import { verifyKapsoSignature } from "./lib/signature.js";
 import { ApplePayPayload, ingestApplePay } from "./services/applePay.js";
 import { handleInbound, senderPhone } from "./services/inbound.js";
-import { claimApplePaySetupCode, findUserByApplePayToken } from "./services/users.js";
+import { findUserByApplePayToken } from "./services/users.js";
 import { web } from "./web/routes.js";
 
 export const app = new Hono<AppEnv>();
@@ -51,51 +51,46 @@ app.post("/webhooks/kapso", async (c) => {
   return c.text("ok");
 });
 
+// El Atajo muestra `message` como notificación: es lo único que ve la persona.
 app.post("/ingest/apple-pay", async (c) => {
   const token = c.req.header("Authorization")?.match(/^Bearer (.+)$/)?.[1]?.trim();
   const user = token ? await findUserByApplePayToken(token) : undefined;
-  if (!user) return c.json({ error: "token inválido" }, 401);
+  if (!user) {
+    const message = `❌ Tu código de Luke no es válido. Conéctate de nuevo en ${config.PUBLIC_URL}/cuenta/apple-pay`;
+    return c.json({ error: "token inválido", message }, 401);
+  }
 
   const json: unknown = await c.req.json().catch(() => null);
-  // El Atajo hace un envío de prueba al conectarse, para que iOS pida sus permisos con el iPhone desbloqueado.
-  if (json && typeof json === "object" && "ping" in json) return c.json({ status: "ok" });
+  // Sin compra = el Atajo se abrió a mano ("Probar conexión"). Así iOS pide sus permisos con el
+  // iPhone desbloqueado (bloqueado no puede pedirlos y la primera compra fallaría), y validamos el código pegado.
+  const isEmpty = (v: unknown) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+  if (json && typeof json === "object" && isEmpty((json as Record<string, unknown>).raw) && isEmpty((json as Record<string, unknown>).amount)) {
+    const message = `✅ Conectado a la cuenta de Luke de ${user.name ?? `+${user.phone}`}. Ahora crea la automatización de Wallet.`;
+    return c.json({ status: "ok", message });
+  }
+
   const body = ApplePayPayload.safeParse(json);
   if (!body.success) {
     // Diagnóstico: qué campos mandó el Atajo y de qué tipo (el token va en el header, no se registra).
     const fields = json && typeof json === "object" ? Object.entries(json).map(([k, v]) => `${k}:${Array.isArray(v) ? "array" : typeof v}`) : [typeof json];
     const raw = json && typeof json === "object" && "raw" in json ? JSON.stringify((json as { raw: unknown }).raw).slice(0, 300) : "-";
     console.warn(`[apple-pay] payload rechazado (usuario ${user.id}) campos=[${fields.join(", ")}] raw=${raw}`);
-    return c.json({ error: "payload inválido", issues: body.error.issues }, 400);
+    return c.json({ error: "payload inválido", issues: body.error.issues, message: "⚠️ Luke no pudo leer esta compra." }, 400);
   }
 
   const result = await ingestApplePay(user, body.data);
-  if (result.status === "invalid_amount") return c.json({ error: `monto no reconocido: ${body.data.amount ?? "(desde raw)"}` }, 422);
-  return c.json({ status: result.status, id: result.transaction.id, ...(result.status === "created" && { asked: result.asked }) });
-});
-
-// El Atajo compartido canjea el código de conexión (que le pasó la web) por su token personal.
-const connectLimit = createRateLimiter(20, 15 * 60 * 1000);
-app.post("/ingest/apple-pay/connect", async (c) => {
-  if (!connectLimit(clientIp(c))) return c.json({ error: "Demasiados intentos, espera unos minutos." }, 429);
-  const json: unknown = await c.req.json().catch(() => null);
-  const code = json && typeof json === "object" && "code" in json && typeof json.code === "string" ? json.code : "";
-  const claimed = code ? await claimApplePaySetupCode(code) : undefined;
-  if (!claimed) {
-    return c.json({ error: `Ese código no sirve o ya venció. Genera uno nuevo en ${config.PUBLIC_URL}/cuenta/apple-pay` }, 400);
+  if (result.status === "invalid_amount") {
+    const error = `monto no reconocido: ${body.data.amount ?? "(desde raw)"}`;
+    return c.json({ error, message: "⚠️ Luke no pudo leer el monto de esta compra. Cuéntasela por WhatsApp." }, 422);
   }
-  const { user, token } = claimed;
-  const owner = [user.name, `+${maskPhone(user.phone)}`].filter(Boolean).join(" · ");
-  return c.json({
-    authorization: `Bearer ${token}`,
-    // El Atajo lo muestra antes de guardar el token, para que nadie conecte tu iPhone a otra cuenta.
-    confirm: `¿Conectar este iPhone con la cuenta de Luke de ${owner}?\n\nSi iOS te pide permisos, elige “Always Allow” (Permitir siempre).`,
-    message: "¡Listo! 🎉 Ahora crea la automatización de Wallet (el último paso en la página de Luke).",
-  });
+  const tx = result.transaction;
+  const spent = `${formatMoney(tx.amountMinor, tx.currency, user.currency)} en ${tx.merchant ?? "una compra"}`;
+  const message =
+    result.status === "duplicate"
+      ? `Luke ya tenía anotada esta compra (${spent}).`
+      : `✅ Luke anotó ${spent}.${result.asked ? " Te pregunto por WhatsApp qué fue." : ""}`;
+  return c.json({ status: result.status, id: tx.id, ...(result.status === "created" && { asked: result.asked }), message });
 });
-
-function maskPhone(phone: string): string {
-  return phone.slice(0, 2) + "•".repeat(Math.max(0, phone.length - 6)) + phone.slice(-4);
-}
 
 // Web y API comparten la sesión (cookie en la web, Bearer en la app móvil).
 app.use("/api/*", csrf({ origin: config.PUBLIC_URL }), sessionMiddleware);

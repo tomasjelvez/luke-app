@@ -205,53 +205,25 @@ describe("Apple Pay por usuario", () => {
     expect(tx).toMatchObject({ amountMinor: 4505, currency: "AUD", merchant: "Ampol", status: "pending" });
   });
 
-  it("rechaza un pago sin monto ni entrada cruda", async () => {
+  it("abrir el Atajo sin compra prueba la conexión: valida el código sin registrar gastos", async () => {
     const cookie = await signUp(ANA);
     const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
-    const res = await post("/ingest/apple-pay", { merchant: "", amount: "" }, { Authorization: `Bearer ${token}` });
-    expect(res.status).toBe(400);
-  });
+    const test = (authorization: string) => post("/ingest/apple-pay", { raw: "" }, { Authorization: authorization });
 
-  it("el Atajo compartido canjea el código de conexión por un token, una sola vez", async () => {
-    const cookie = await signUp(ANA);
-    const oldToken = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
-    const setup = await (await post("/api/me/apple-pay-setup", {}, { cookie })).json();
-    expect(setup.code).toMatch(/^luke-setup-/);
-    expect(setup.runUrl).toBe(
-      `shortcuts://run-shortcut?name=Luke%20Apple%20Pay&input=text&text=${encodeURIComponent(setup.code)}`,
-    );
-
-    const res = await post("/ingest/apple-pay/connect", { code: setup.code });
-    const body = await res.json();
-    expect(body).toMatchObject({ authorization: expect.stringMatching(/^Bearer /), confirm: expect.stringContaining("Ana") });
-    expect(body.confirm).not.toContain(ANA); // el número va enmascarado
-
-    const pay = (authorization: string) => post("/ingest/apple-pay", { amount: "$5", merchant: "Cafe" }, { Authorization: authorization });
-    expect((await pay(body.authorization)).status).toBe(200);
-    expect((await pay(`Bearer ${oldToken}`)).status).toBe(401);
-
-    const again = await post("/ingest/apple-pay/connect", { code: setup.code });
-    expect(again.status).toBe(400);
-  });
-
-  it("el envío de prueba del Atajo valida el token sin registrar gastos", async () => {
-    const cookie = await signUp(ANA);
-    const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
-    const ping = (authorization: string) => post("/ingest/apple-pay", { ping: "1" }, { Authorization: authorization });
-    expect(await (await ping(`Bearer ${token}`)).json()).toEqual({ status: "ok" });
-    expect((await ping("Bearer otro")).status).toBe(401);
+    expect(await (await test(`Bearer ${token}`)).json()).toMatchObject({ status: "ok", message: expect.stringContaining("Ana") });
+    const invalid = await test("Bearer otro");
+    expect(invalid.status).toBe(401);
+    expect(await invalid.json()).toMatchObject({ message: expect.stringContaining("no es válido") });
     expect(await db.query.transactions.findMany()).toHaveLength(0);
     expect((await userByPhone(ANA)).applePayConnectedAt).toBeNull();
   });
 
-  it("rechaza códigos de conexión vencidos o inventados", async () => {
-    await signUp(ANA);
-    const { createApplePaySetupCode } = await import("../../src/services/users.js");
-    const ana = await userByPhone(ANA);
-    const { code } = await createApplePaySetupCode(ana.id, new Date(Date.now() - 11 * 60 * 1000));
-    expect((await post("/ingest/apple-pay/connect", { code })).status).toBe(400);
-    expect((await post("/ingest/apple-pay/connect", { code: "luke-setup-inventado" })).status).toBe(400);
-    expect((await post("/ingest/apple-pay/connect", {})).status).toBe(400);
+  it("cada respuesta trae un mensaje para la notificación del Atajo", async () => {
+    const cookie = await signUp(ANA);
+    const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
+    const pay = () => post("/ingest/apple-pay", { raw: "Ampol A$45.05 Debit Mastercard" }, { Authorization: `Bearer ${token}` });
+    expect((await (await pay()).json()).message).toMatch(/^✅ Luke anotó .*45[.,]05 en Ampol/);
+    expect((await (await pay()).json()).message).toContain("ya tenía anotada");
   });
 
   it("el token heredado del MVP sigue funcionando para su dueño", async () => {

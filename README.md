@@ -14,7 +14,7 @@ Stack: Node + TypeScript, [Hono](https://hono.dev), Postgres + Drizzle, [Kapso](
 
 - **Registro:** `/registro` pide nombre y moneda (la zona horaria se detecta sola). La persona envía un código a Luke por WhatsApp (`wa.me` con el texto ya escrito) y así verifica su número, sin SMS ni contraseñas.
 - **Entrar:** `/entrar` genera otro código; al enviarlo, Luke pide confirmar con "Sí, soy yo" para evitar que alguien engañe a otra persona para que le mande su código.
-- **Apple Pay:** con el [Atajo compartido](#atajo-compartido-de-apple-pay), la persona agrega el Atajo, toca **Conectar mi iPhone** en `/cuenta/apple-pay` y crea la automatización de Wallet (una acción). Nunca ve ni copia un token. Sigue existiendo la configuración manual con token personal (se guarda con hash). La página detecta sola la primera compra.
+- **Apple Pay:** con el [Atajo compartido](#atajo-compartido-de-apple-pay), en `/cuenta/apple-pay` la persona copia su código con un toque, agrega el Atajo pegándolo, lo prueba una vez y crea la automatización de Wallet (una acción). Sigue existiendo la configuración manual con token personal (se guarda con hash). La página detecta sola la primera compra.
 - **API para la app móvil:** las mismas rutas en `/api/*`; con `client: "mobile"` en `/api/auth/poll` se recibe un token de sesión para usar como `Authorization: Bearer`.
 - Números sin cuenta que le escriben a Luke reciben el link de registro. `MAX_USERS` limita las cuentas mientras el registro sea abierto.
 
@@ -65,50 +65,42 @@ Las migraciones se aplican solas al arrancar. Escríbele "hola" al número del s
 
 ## Atajo compartido de Apple Pay
 
-Un solo Atajo (**Luke Apple Pay**) sirve para todos los usuarios: cada iPhone guarda su propio token.
+Un solo Atajo (**Luke Apple Pay**) sirve para todos los usuarios. Tiene 4 acciones y ninguna lógica:
 
-```
-Web /cuenta/apple-pay ── "Conectar mi iPhone" ──▶ POST /api/me/apple-pay-setup  → código luke-setup-… (10 min, un uso)
-        │
-        └─▶ shortcuts://run-shortcut?name=Luke Apple Pay&input=text&text=luke-setup-…
-                 │
-                 ▼
-        Atajo ── POST /ingest/apple-pay/connect {code} ──▶ { authorization, confirm, message }
-                 │  confirma la cuenta y guarda "Bearer …" en Shortcuts/luke-token.txt
-                 ▼
-Wallet ──▶ Automatización ──▶ Run Shortcut "Luke Apple Pay" (Shortcut Input)
-                 │
-                 ▼
-        Atajo ── POST /ingest/apple-pay {raw} + Authorization del archivo
-```
+1. **Text**: el código personal, que se pega al agregar el Atajo (pregunta de importación)
+2. **Get Contents of URL**: `POST /ingest/apple-pay`, header `Authorization: Bearer <código>`, JSON `raw` = Shortcut Input
+3. **Get Dictionary Value** `message`
+4. **Show Notification** con ese mensaje
 
-Apple no permite instalar la automatización de Wallet desde un link, así que ese paso lo hace cada persona. La página le muestra cómo.
+El servidor decide qué responder:
+
+- **Sin compra** (`raw` vacío, el Atajo se abrió a mano): es la prueba de conexión. Responde "✅ Conectado a la cuenta de…".
+- **Con compra:** la registra y responde "✅ Luke anotó…".
+- **Error:** responde con un mensaje de error, por ejemplo cuando el código no es válido.
+
+**Por qué el código va dentro del Atajo:** iOS no deja que una automatización lea archivos de iCloud Drive con el iPhone bloqueado. Una versión anterior guardaba el token en un archivo y fallaba en cada compra con el iPhone bloqueado.
+
+**Por qué hay que probarlo una vez a mano:** la primera vez que el Atajo se conecta al servidor, iOS pide permiso. Con el iPhone bloqueado no lo puede pedir, así que la primera compra fallaría. Abrirlo a mano (el botón "Probar conexión", que usa `shortcuts://run-shortcut?name=…`) dispara el permiso con el iPhone desbloqueado.
+
+Flujo del usuario en `/cuenta/apple-pay`:
+
+1. Toca "Copiar mi código y agregar el Atajo": genera su token, lo copia al portapapeles y abre el link de iCloud. Agrega el Atajo y pega el código.
+2. Toca "Probar conexión" y, si iOS pregunta, elige **Always Allow**.
+3. Crea la automatización: **Wallet → Run Immediately → Run Shortcut "Luke Apple Pay"** (Input = Shortcut Input).
+
+Apple no permite instalar la automatización de Wallet desde un link, así que ese paso lo hace cada persona.
 
 ### Crear el Atajo (una vez, quien administra Luke)
 
-**Automático (Mac):** `python3 shortcut/build.py https://<servidor>` genera el Atajo y `shortcuts sign --mode anyone -i shortcut/build/unsigned.shortcut -o "shortcut/build/Luke Apple Pay.shortcut"` lo firma. Ábrelo para importarlo y compártelo con **Copy iCloud Link**.
+En un Mac:
 
-**A mano**, si prefieres armarlo en el iPhone:
+```bash
+python3 shortcut/build.py https://<servidor>
+shortcuts sign --mode anyone -i shortcut/build/unsigned.shortcut -o "shortcut/build/Luke Apple Pay.shortcut"
+open "shortcut/build/Luke Apple Pay.shortcut"
+```
 
-En el iPhone, app **Atajos** → **+**, nómbralo exactamente `Luke Apple Pay` (o cambia `APPLE_PAY_SHORTCUT_NAME`). Reemplaza `<servidor>` por tu `PUBLIC_URL`.
-
-1. En los detalles del Atajo (ⓘ), activa que reciba entrada: **Receive Any input**. En **If there's no input** elige **Ask For** → **Text**. Así, si se abre a mano, pide pegar el código.
-2. **If** `Shortcut Input` **contains** `luke-setup-`:
-   1. **Get Contents of URL** `https://<servidor>/ingest/apple-pay/connect`, Method **POST**, Request Body **JSON**: `code` (Text) = `Shortcut Input`.
-   2. **Get Dictionary Value** `authorization` de `Contents of URL`.
-   3. **If** `Dictionary Value` **has any value**:
-      - **Get Dictionary Value** `confirm` de `Contents of URL` → **Show Alert** con ese texto, con **Show Cancel Button** activado. Si la persona cancela, el Atajo se detiene.
-      - **Save File**: el primer `Dictionary Value` (authorization), **Ask Where to Save** desactivado, destino: carpeta **Shortcuts**, subpath `luke-token.txt`, **Overwrite If File Exists** activado.
-      - **Get Dictionary Value** `message` de `Contents of URL` → **Show Alert**.
-   4. **Otherwise**: **Get Dictionary Value** `error` de `Contents of URL` → **Show Alert**.
-   5. **End If**, y luego **Stop This Shortcut**.
-3. **End If**
-4. **Get File** de la carpeta **Shortcuts**, path `luke-token.txt`, **Error If Not Found** desactivado.
-5. **If** `File` **does not have any value**: **Show Notification** "Conecta tu iPhone en <servidor>/cuenta/apple-pay" → **Stop This Shortcut** → **End If**.
-6. **Get Text from Input** con el `File`. Si tu versión de iOS no tiene esa acción, usa **Text** con la variable `File`.
-7. **Get Contents of URL** `https://<servidor>/ingest/apple-pay`, Method **POST**, Header `Authorization` = el texto del paso 6, Request Body **JSON**: `raw` (Text) = `Shortcut Input`, sin elegir ninguna propiedad.
-
-Para compartirlo: mantén presionado el Atajo → **Share** → **Copy iCloud Link**. Pon ese link en `APPLE_PAY_SHORTCUT_URL`. **Antes de compartirlo, borra `luke-token.txt` y revisa que el Atajo no tenga tokens escritos a mano.**
+Al importarlo, el Atajo te pide el código: escribe cualquier cosa, porque al compartirlo esa respuesta se borra. Después compártelo con **Copy iCloud Link** y pon el link en `APPLE_PAY_SHORTCUT_URL`. Antes de configurarlo, revisa que la versión compartida no traiga ningún token.
 
 ### Configuración manual (alternativa)
 

@@ -6,7 +6,7 @@ import { ProfileInput } from "../lib/profile.js";
 import { createRateLimiter } from "../lib/rateLimit.js";
 import { deleteSession, pollAuth, startAuth } from "../services/auth.js";
 import { formatSummary, summarize } from "../services/expenses.js";
-import { createApplePaySetupCode, hasCapacity, rotateApplePayToken, updateProfile } from "../services/users.js";
+import { hasCapacity, rotateApplePayToken, updateProfile } from "../services/users.js";
 import { clearSessionCookie, clientIp, setSessionCookie, type AppEnv } from "./session.js";
 
 /** API JSON: la usa la web y la usará la app móvil. */
@@ -36,10 +36,9 @@ export function applePaySetup(token?: string) {
   };
 }
 
-/** Abre el Atajo compartido en el iPhone y le pasa el código de conexión como entrada. */
-export function shortcutRunUrl(code: string): string {
-  const name = encodeURIComponent(config.APPLE_PAY_SHORTCUT_NAME);
-  return `shortcuts://run-shortcut?name=${name}&input=text&text=${encodeURIComponent(code)}`;
+/** Abre el Atajo compartido sin entrada: hace el envío de prueba ("Probar conexión"). */
+export function shortcutRunUrl(): string {
+  return `shortcuts://run-shortcut?name=${encodeURIComponent(config.APPLE_PAY_SHORTCUT_NAME)}`;
 }
 
 // --- Registro y entrada --------------------------------------------------------
@@ -105,11 +104,6 @@ me.patch("/", async (c) => {
 me.post("/apple-pay-token", async (c) => {
   const token = await rotateApplePayToken(c.get("user")!.id);
   return c.json(applePaySetup(token));
-});
-
-me.post("/apple-pay-setup", async (c) => {
-  const { code, expiresAt } = await createApplePaySetupCode(c.get("user")!.id);
-  return c.json({ code, expiresAt, runUrl: shortcutRunUrl(code), shortcutUrl: config.APPLE_PAY_SHORTCUT_URL ?? null });
 });
 
 me.get("/summary", async (c) => {
