@@ -218,6 +218,16 @@ describe("Apple Pay por usuario", () => {
     expect((await userByPhone(ANA)).applePayConnectedAt).toBeNull();
   });
 
+  it("registra la compra con las propiedades que manda el Atajo (monto con coma decimal)", async () => {
+    const cookie = await signUp(ANA);
+    const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;
+    const body = { amount: "A$9,55", merchant: "Shebeen Grocer Pty Ltd", card: "Debit Mastercard", raw: "Shebeen Grocer Pty Ltd" };
+    const res = await post("/ingest/apple-pay", body, { Authorization: `Bearer ${token}` });
+    expect(await res.json()).toMatchObject({ status: "created" });
+    const [tx] = await db.query.transactions.findMany();
+    expect(tx).toMatchObject({ amountMinor: 955, currency: "AUD", merchant: "Shebeen Grocer Pty Ltd" });
+  });
+
   it("cada respuesta trae un mensaje para la notificación del Atajo", async () => {
     const cookie = await signUp(ANA);
     const token = (await (await post("/api/me/apple-pay-token", {}, { cookie })).json()).token;

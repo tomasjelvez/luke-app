@@ -41,6 +41,11 @@ def fields(**items):
     }
 
 
+def input_property(name):
+    """Una propiedad de la compra de Wallet (Shortcut Input → Amount, Merchant…)."""
+    return {"Type": "ExtensionInput", "Aggrandizements": [{"Type": "WFPropertyVariableAggrandizement", "PropertyName": name}]}
+
+
 def action(identifier, **params):
     return {"WFWorkflowActionIdentifier": f"is.workflow.actions.{identifier}", "WFWorkflowActionParameters": params}
 
@@ -58,7 +63,14 @@ actions = [
         ShowHeaders=True,
         WFHTTPHeaders=fields(Authorization=text("Bearer ", output(code, "Text"))),
         WFHTTPBodyType="JSON",
-        WFJSONValues=fields(raw=text({"Type": "ExtensionInput"})),
+        # Las propiedades traen el monto; `raw` (la compra como texto) solo trae el comercio,
+        # pero el servidor lo usa si faltan las demás o si se abrió a mano (prueba de conexión).
+        WFJSONValues=fields(
+            amount=text(input_property("Amount")),
+            merchant=text(input_property("Merchant")),
+            card=text(input_property("Card or Pass")),
+            raw=text({"Type": "ExtensionInput"}),
+        ),
     ),
     # 3 y 4. Muestra lo que respondió Luke.
     action(
@@ -91,6 +103,8 @@ workflow = {
         "WFImageContentItem", "WFiTunesProductContentItem", "WFLocationContentItem", "WFDCMapsLinkContentItem",
         "WFAVAssetContentItem", "WFPDFContentItem", "WFPhoneNumberContentItem", "WFRichTextContentItem",
         "WFSafariWebPageContentItem", "WFStringContentItem", "WFURLContentItem",
+        # Sin esta clase, iOS convierte la compra de Wallet en texto (solo el comercio) y se pierde el monto.
+        "WFWalletTransactionContentItem",
     ],
     "WFWorkflowOutputContentItemClasses": [],
     "WFWorkflowActions": actions,
