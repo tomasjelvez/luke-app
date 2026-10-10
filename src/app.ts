@@ -65,7 +65,10 @@ app.post("/ingest/apple-pay", async (c) => {
   // iPhone desbloqueado (bloqueado no puede pedirlos y la primera compra fallaría), y validamos el código pegado.
   const isEmpty = (v: unknown) => v === undefined || v === null || (typeof v === "string" && v.trim() === "");
   if (json && typeof json === "object" && isEmpty((json as Record<string, unknown>).raw) && isEmpty((json as Record<string, unknown>).amount)) {
-    const message = `✅ Conectado a la cuenta de Luke de ${user.name ?? `+${user.phone}`}. Ahora crea la automatización de Wallet.`;
+    // El permiso para enviar datos de Wallet solo lo pide una compra real, y bloqueado no se puede conceder.
+    const message =
+      `✅ Conectado a la cuenta de Luke de ${user.name ?? `+${user.phone}`}. Ahora crea la automatización de Wallet. ` +
+      `Tu primera compra hazla con el iPhone desbloqueado y elige “Always Allow”.`;
     return c.json({ status: "ok", message });
   }
 
