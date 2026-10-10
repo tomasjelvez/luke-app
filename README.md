@@ -78,6 +78,8 @@ El servidor decide qué responder:
 - **Con compra:** la registra y responde "✅ Luke anotó…".
 - **Error:** responde con un mensaje de error, por ejemplo cuando el código no es válido.
 
+**Por qué el Atajo acepta `WFWalletTransactionContentItem` y envía propiedades:** si no acepta esa clase, iOS convierte la compra en texto y solo queda el comercio, sin el monto. Con la clase, el Atajo envía `Amount`, `Merchant` y `Card or Pass`.
+
 **Por qué el código va dentro del Atajo:** iOS no deja que una automatización lea archivos de iCloud Drive con el iPhone bloqueado. Una versión anterior guardaba el token en un archivo y fallaba en cada compra con el iPhone bloqueado.
 
 **Por qué hay que probarlo una vez a mano:** la primera vez que el Atajo se conecta al servidor, iOS pide permiso. Con el iPhone bloqueado no lo puede pedir, así que la primera compra fallaría. Abrirlo a mano (el botón "Probar conexión", que usa `shortcuts://run-shortcut?name=…`) dispara el permiso con el iPhone desbloqueado.
@@ -87,6 +89,7 @@ Flujo del usuario en `/cuenta/apple-pay`:
 1. Toca "Copiar mi código y agregar el Atajo": genera su token, lo copia al portapapeles y abre el link de iCloud. Agrega el Atajo y pega el código.
 2. Toca "Probar conexión" y, si iOS pregunta, elige **Always Allow**.
 3. Crea la automatización: **Wallet → Run Immediately → Run Shortcut "Luke Apple Pay"** (Input = Shortcut Input).
+4. Hace su primera compra con el iPhone **desbloqueado** y, cuando iOS pregunta si el Atajo puede compartir datos de Wallet, elige **Always Allow**. Ese permiso solo se puede pedir con una compra real, y con el iPhone bloqueado no se puede conceder: sin este paso, cada compra con el iPhone bloqueado falla.
 
 Apple no permite instalar la automatización de Wallet desde un link, así que ese paso lo hace cada persona.
 

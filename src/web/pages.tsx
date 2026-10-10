@@ -336,7 +336,15 @@ export function ApplePayPage(props: {
                 <span class="k">Shortcut Input</span> <span class="alt">(Entrada del atajo)</span>. Toca 
                 <span class="k">Done</span>.
               </li>
-              <li>Mándale un mensaje a Luke por WhatsApp y paga algo con Apple Pay: Luke te preguntará qué fue.</li>
+              <li>
+                Haz tu <span class="k">primera compra con el iPhone desbloqueado</span>. iOS te preguntará si el Atajo
+                puede usar los datos de Wallet: elige <span class="k">Always Allow</span>{" "}
+                <span class="alt">(Permitir siempre)</span>. Desde ahí funciona aunque el iPhone esté bloqueado.
+              </li>
+              <li>
+                Verás la notificación “✅ Luke anotó…”. Si le escribiste a Luke en las últimas 24 h, también te pregunta
+                por WhatsApp qué fue.
+              </li>
             </ol>
           </section>
         </>
