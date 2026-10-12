@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 
-/** Mensajes de WhatsApp "enviados" durante el test. */
+/** WhatsApp messages "sent" during the test. */
 export const sent: { to: string; body: string; buttons?: { id: string; title: string }[] }[] = [];
 
 export const whatsappMock = {

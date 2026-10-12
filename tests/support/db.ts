@@ -8,7 +8,7 @@ export async function resetDb() {
 }
 
 let seq = 0;
-/** Evento de Kapso "mensaje recibido" mínimo. */
+/** Minimal Kapso "message received" event. */
 export function inbound(from: string, msg: { text?: string; buttonId?: string; contextId?: string }) {
   const id = `wamid.test.${++seq}`;
   return {

@@ -13,7 +13,7 @@ const TOUCH_SESSION_AFTER_MS = 60 * 60 * 1000;
 
 export type SessionKind = keyof typeof SESSION_TTL_MS;
 
-// --- Inicio del flujo (web o app) ---------------------------------------------
+// --- Starting the flow (web or app) -------------------------------------------
 
 export interface StartedAuth {
   authId: number;
@@ -27,7 +27,7 @@ export async function startAuth(purpose: "signup" | "login", signupData?: Signup
   const pollSecret = randomToken();
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
 
-  // Reintenta si el código aleatorio choca con uno existente (muy improbable).
+  // Retry if the random code collides with an existing one (very unlikely).
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateCode();
     const [row] = await db
@@ -46,10 +46,10 @@ export async function startAuth(purpose: "signup" | "login", signupData?: Signup
       };
     }
   }
-  throw new Error("No se pudo generar un código único");
+  throw new Error("Could not generate a unique code");
 }
 
-// --- Consulta del estado desde la web o la app -------------------------------
+// --- Polling the status from the web or the app -------------------------------
 
 export type PollResult =
   | { status: "pending" | "awaiting_confirmation" | "expired" | "rejected" | "not_found" }
@@ -62,7 +62,7 @@ export async function pollAuth(authId: number, pollSecret: string, kind: Session
   if (row.status === "consumed") return { status: "not_found" };
   if (row.status !== "verified") return { status: row.expiresAt <= now ? "expired" : row.status };
 
-  // Verificado: lo consumimos una sola vez y entregamos la sesión.
+  // Verified: consume it exactly once and hand over the session.
   const consumed = await db
     .update(authCodes)
     .set({ status: "consumed" })
@@ -80,11 +80,11 @@ function safeEqualHex(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-// --- El código llega por WhatsApp --------------------------------------------
+// --- The code arrives over WhatsApp --------------------------------------------
 
 /**
- * Procesa un mensaje de WhatsApp que trae un código de Luke. `user` es la cuenta
- * del número que escribe, si ya existe.
+ * Handles a WhatsApp message containing a Luke code. `user` is the account of
+ * the sending number, if it already exists.
  */
 export async function handleAuthCode(
   code: string,
@@ -107,7 +107,7 @@ export async function handleAuthCode(
     return;
   }
 
-  // Registro de un número nuevo: creamos la cuenta al tiro.
+  // Sign-up from a new number: create the account right away.
   if (row.purpose === "signup" && !user) {
     if (!row.signupData || !(await hasCapacity())) {
       await setStatus(row, "rejected", { phone });
@@ -125,8 +125,8 @@ export async function handleAuthCode(
     return;
   }
 
-  // Login (o registro de un número que ya tiene cuenta): pedimos confirmación,
-  // para que nadie pueda engañar a alguien para que le envíe su código.
+  // Login (or sign-up from a number that already has an account): ask for
+  // confirmation, so nobody can trick someone into sending them their code.
   if (!user) {
     await setStatus(row, "rejected", { phone });
     await sendText(to, `No encontré una cuenta con este número. Regístrate en ${config.PUBLIC_URL}/registro ✨`, { replyTo });
@@ -146,7 +146,7 @@ export async function handleAuthCode(
   );
 }
 
-/** Respuesta a los botones "Sí, soy yo" / "No fui yo". */
+/** Reply to the "Sí, soy yo" / "No fui yo" buttons. */
 export async function confirmAuth(user: User, authId: number, approved: boolean, now = new Date()): Promise<void> {
   const row = await db.query.authCodes.findFirst({
     where: and(eq(authCodes.id, authId), eq(authCodes.userId, user.id), eq(authCodes.status, "awaiting_confirmation")),
@@ -168,7 +168,7 @@ async function setStatus(row: AuthCode, status: AuthCode["status"], extra: Parti
   await db.update(authCodes).set({ status, ...extra }).where(eq(authCodes.id, row.id));
 }
 
-// --- Sesiones -----------------------------------------------------------------
+// --- Sessions -----------------------------------------------------------------
 
 export async function createSession(userId: number, kind: SessionKind, now = new Date()): Promise<string> {
   const token = randomToken();

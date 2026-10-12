@@ -8,28 +8,28 @@ const optional = z
 const Env = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().min(1),
-  // URL pública de la app (links de WhatsApp, cookies seguras, chequeo CSRF).
+  // The app's public URL (WhatsApp links, secure cookies, CSRF check).
   PUBLIC_URL: z.string().url().optional(),
 
   KAPSO_API_KEY: z.string().min(1),
   KAPSO_PHONE_NUMBER_ID: z.string().min(1),
   KAPSO_WEBHOOK_SECRET: z.string().min(1),
   KAPSO_BASE_URL: z.string().default("https://app.kapso.ai/api/meta/"),
-  // Número de WhatsApp de Luke, solo dígitos, para los links wa.me del registro.
-  WHATSAPP_BOT_NUMBER: z.string().regex(/^\d{8,15}$/, "Número sin '+', solo dígitos"),
+  // Luke's WhatsApp number, digits only, for the sign-up wa.me links.
+  WHATSAPP_BOT_NUMBER: z.string().regex(/^\d{8,15}$/, "Digits only, no '+'"),
 
   LLM_MODEL: z.string().default("claude-opus-5"),
 
-  // Tope de cuentas mientras el registro sea abierto (protege costos de Meta y Claude).
+  // Account cap while sign-up is open (keeps Meta and Claude costs in check).
   MAX_USERS: z.coerce.number().int().positive().default(20),
   NIGHTLY_HOUR: z.coerce.number().int().min(0).max(23).default(21),
 
-  // Atajo compartido de Apple Pay: link de iCloud y nombre exacto con que queda instalado.
+  // Shared Apple Pay Shortcut: iCloud link and the exact name it installs with.
   APPLE_PAY_SHORTCUT_URL: z.string().url().optional(),
   APPLE_PAY_SHORTCUT_NAME: z.string().min(1).default("Luke Apple Pay"),
 
-  // Legado del MVP de un solo usuario: si están definidas, al arrancar se asocia
-  // ese token de Apple Pay a la cuenta de ese número, para no reconfigurar el Atajo.
+  // Legacy single-user MVP: if set, that Apple Pay token is linked at startup to
+  // that number's account, so the existing Shortcut keeps working.
   OWNER_PHONE: optional,
   APPLE_PAY_TOKEN: optional,
 });
@@ -40,7 +40,7 @@ export const config: Config = (() => {
   const parsed = Env.safeParse(process.env);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n");
-    throw new Error(`Variables de entorno inválidas (revisa .env):\n${issues}`);
+    throw new Error(`Invalid environment variables (check .env):\n${issues}`);
   }
   const env = parsed.data;
   return { ...env, PUBLIC_URL: (env.PUBLIC_URL ?? `http://localhost:${env.PORT}`).replace(/\/$/, "") };

@@ -1,9 +1,9 @@
-"""Genera el Atajo compartido "Luke Apple Pay" (sin firmar). Firmar con:
+"""Builds the shared "Luke Apple Pay" Shortcut (unsigned). Sign it with:
     shortcuts sign --mode anyone -i shortcut/build/unsigned.shortcut -o "shortcut/build/Luke Apple Pay.shortcut"
 
-El Atajo es mínimo a propósito: el código de la persona queda dentro del Atajo (se pega al
-instalarlo), así no lee archivos, que iOS no permite con el iPhone bloqueado. Toda la lógica
-está en el servidor, que responde con el `message` que el Atajo muestra como notificación.
+The Shortcut is deliberately minimal: the person's code lives inside the Shortcut (pasted when
+installing it), so it never reads files, which iOS doesn't allow while the iPhone is locked. All
+the logic is on the server, which replies with the `message` the Shortcut shows as a notification.
 """
 import plistlib
 import sys
@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 
 SERVER = (sys.argv[1] if len(sys.argv) > 1 else "https://luke-app-production.up.railway.app").rstrip("/")
-OBJ = "￼"  # marcador de variable dentro de un texto
+OBJ = "￼"  # variable placeholder inside a text
 
 
 def uid():
@@ -23,7 +23,7 @@ def output(action_uuid, name):
 
 
 def text(*parts):
-    """Texto con variables: text("Bearer ", var)."""
+    """Text with variables: text("Bearer ", var)."""
     string, attachments = "", {}
     for part in parts:
         if isinstance(part, str):
@@ -42,7 +42,7 @@ def fields(**items):
 
 
 def input_property(name):
-    """Una propiedad de la compra de Wallet (Shortcut Input → Amount, Merchant…)."""
+    """A property of the Wallet purchase (Shortcut Input → Amount, Merchant…)."""
     return {"Type": "ExtensionInput", "Aggrandizements": [{"Type": "WFPropertyVariableAggrandizement", "PropertyName": name}]}
 
 
@@ -52,9 +52,9 @@ def action(identifier, **params):
 
 code, response, message = uid(), uid(), uid()
 actions = [
-    # 1. El código personal: se pega al agregar el Atajo (pregunta de importación).
+    # 1. The personal code, pasted when adding the Shortcut (import question).
     action("gettext", UUID=code, WFTextActionText=""),
-    # 2. Envía la compra (o nada, si se abrió a mano: el servidor lo toma como prueba de conexión).
+    # 2. Sends the purchase (or nothing, if run by hand: the server treats it as a connection test).
     action(
         "downloadurl",
         UUID=response,
@@ -63,8 +63,8 @@ actions = [
         ShowHeaders=True,
         WFHTTPHeaders=fields(Authorization=text("Bearer ", output(code, "Text"))),
         WFHTTPBodyType="JSON",
-        # Las propiedades traen el monto; `raw` (la compra como texto) solo trae el comercio,
-        # pero el servidor lo usa si faltan las demás o si se abrió a mano (prueba de conexión).
+        # The properties carry the amount; `raw` (the purchase as text) only has the merchant,
+        # but the server uses it if the others are missing or the Shortcut was run by hand (connection test).
         WFJSONValues=fields(
             amount=text(input_property("Amount")),
             merchant=text(input_property("Merchant")),
@@ -72,7 +72,7 @@ actions = [
             raw=text({"Type": "ExtensionInput"}),
         ),
     ),
-    # 3 y 4. Muestra lo que respondió Luke.
+    # 3 and 4. Show Luke's reply.
     action(
         "getvalueforkey",
         UUID=message,
@@ -103,7 +103,7 @@ workflow = {
         "WFImageContentItem", "WFiTunesProductContentItem", "WFLocationContentItem", "WFDCMapsLinkContentItem",
         "WFAVAssetContentItem", "WFPDFContentItem", "WFPhoneNumberContentItem", "WFRichTextContentItem",
         "WFSafariWebPageContentItem", "WFStringContentItem", "WFURLContentItem",
-        # Sin esta clase, iOS convierte la compra de Wallet en texto (solo el comercio) y se pierde el monto.
+        # Without this class, iOS turns the Wallet purchase into text (merchant only) and the amount is lost.
         "WFWalletTransactionContentItem",
     ],
     "WFWorkflowOutputContentItemClasses": [],
@@ -113,4 +113,4 @@ workflow = {
 out = Path(__file__).parent / "build" / "unsigned.shortcut"
 out.parent.mkdir(exist_ok=True)
 out.write_bytes(plistlib.dumps(workflow, fmt=plistlib.FMT_BINARY))
-print(f"{out} ({len(actions)} acciones, servidor {SERVER})")
+print(f"{out} ({len(actions)} actions, server {SERVER})")

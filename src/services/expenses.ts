@@ -13,7 +13,7 @@ export function emoji(category: string): string {
 export function describeTx(tx: Transaction, baseCurrency: string): string {
   const parts = [formatMoney(tx.amountMinor, tx.currency, baseCurrency), `${emoji(tx.category)} ${tx.category}`];
   const detail = tx.description ?? tx.merchant;
-  // Evita "🛒 Supermercado · supermercado".
+  // Avoids "🛒 Supermercado · supermercado".
   if (detail && detail.trim().toLowerCase() !== tx.category.toLowerCase()) parts.push(detail);
   return parts.join(" · ");
 }
@@ -26,7 +26,7 @@ export async function pendingTransactions(userId: number, limit = 10) {
   });
 }
 
-/** Pendientes que todavía no le hemos preguntado al usuario (quedaron en cola). */
+/** Pending expenses we haven't asked the user about yet (queued). */
 export async function unaskedPending(userId: number) {
   return db.query.transactions.findMany({
     where: and(eq(transactions.userId, userId), eq(transactions.status, "pending"), isNull(transactions.askedAt)),
@@ -83,7 +83,7 @@ export async function summarize(
     totals.set(r.currency, t);
   }
   return {
-    // La moneda base primero; luego el resto.
+    // Base currency first, then the rest.
     totals: [...totals.values()].sort((a, b) => Number(b.currency === user.currency) - Number(a.currency === user.currency)),
     byCategory: rows
       .map(({ category, currency, amountMinor }) => ({ category, currency, amountMinor }))

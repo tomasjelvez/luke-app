@@ -24,13 +24,13 @@ export const users = pgTable("users", {
   name: text("name"),
   timezone: text("timezone").notNull(),
   currency: text("currency").notNull(),
-  // SHA-256 del token personal que usa el Atajo de Apple Pay (nunca guardamos el token).
+  // SHA-256 of the personal token the Apple Pay Shortcut uses (the token itself is never stored).
   applePayTokenHash: text("apple_pay_token_hash").unique(),
-  // Primera compra recibida por Apple Pay: confirma que el Atajo quedó bien configurado.
+  // First purchase received via Apple Pay: confirms the Shortcut is set up correctly.
   applePayConnectedAt: timestamp("apple_pay_connected_at", { withTimezone: true }),
-  // Última vez que el usuario nos escribió: define la ventana de 24 h de WhatsApp.
+  // Last time the user messaged us: defines the WhatsApp 24h window.
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
-  // Fecha local (YYYY-MM-DD) del último resumen nocturno enviado, para no repetirlo.
+  // Local date (YYYY-MM-DD) of the last nightly summary sent, to avoid repeating it.
   lastNightlyOn: date("last_nightly_on"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -40,7 +40,7 @@ export const transactions = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: integer("user_id").notNull().references(() => users.id),
-    // Monto en unidades menores de la moneda (centavos para AUD, pesos para CLP).
+    // Amount in the currency's minor units (cents for AUD, pesos for CLP).
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
     currency: text("currency").notNull(),
     merchant: text("merchant"),
@@ -49,7 +49,7 @@ export const transactions = pgTable(
     source: txSource("source").notNull(),
     status: txStatus("status").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    // Cuándo le preguntamos al usuario por este gasto (null = pregunta en cola).
+    // When we asked the user about this expense (null = question queued).
     askedAt: timestamp("asked_at", { withTimezone: true }),
     raw: jsonb("raw"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -59,13 +59,13 @@ export const transactions = pgTable(
 
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
-  // ID de WhatsApp (wamid). Único: los webhooks pueden llegar repetidos.
+  // WhatsApp ID (wamid). Unique, since webhooks can be delivered twice.
   wamid: text("wamid").notNull().unique(),
   userId: integer("user_id").notNull().references(() => users.id),
   direction: msgDirection("direction").notNull(),
   type: text("type").notNull(),
   body: text("body"),
-  // Gasto al que se refiere el mensaje, para resolver respuestas citadas.
+  // Expense the message refers to, to resolve quoted replies.
   transactionId: integer("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -74,17 +74,17 @@ export type User = typeof users.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 
 /**
- * Códigos para registrarse o entrar: la web genera el código y la persona lo
- * envía a Luke por WhatsApp, lo que demuestra que el número es suyo.
+ * Sign-up and login codes: the web generates the code and the person sends it to
+ * Luke over WhatsApp, which proves the number is theirs.
  */
 export const authCodes = pgTable("auth_codes", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(),
   purpose: authPurpose("purpose").notNull(),
   status: authStatus("status").notNull().default("pending"),
-  // Datos del formulario de registro (nombre, moneda, zona horaria).
+  // Sign-up form data (name, currency, time zone).
   signupData: jsonb("signup_data").$type<SignupData>(),
-  // Solo el navegador/app que inició el flujo conoce este secreto y puede reclamar la sesión.
+  // Only the browser/app that started the flow knows this secret and can claim the session.
   pollSecretHash: text("poll_secret_hash").notNull(),
   phone: text("phone"),
   userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),

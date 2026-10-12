@@ -4,7 +4,7 @@ import postgres from "postgres";
 
 const TEST_URL = process.env.DATABASE_URL ?? "postgres://luke:luke@localhost:5433/luke_test";
 
-/** Crea la base de prueba (si no existe) y aplica las migraciones. */
+/** Creates the test database (if missing) and applies the migrations. */
 export default async function setup() {
   const url = new URL(TEST_URL);
   const dbName = url.pathname.slice(1);

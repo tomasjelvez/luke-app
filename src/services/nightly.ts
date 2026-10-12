@@ -9,9 +9,9 @@ import { flushQueuedQuestions } from "./ask.js";
 import { emoji, formatSummary, markAsked, pendingTransactions, summarize } from "./expenses.js";
 
 /**
- * Se ejecuta cada 15 minutos; a cada usuario le envía el resumen una vez al día,
- * cuando ya pasó la hora configurada en su zona horaria. Así sobrevive a
- * reinicios del servidor sin duplicarse.
+ * Runs every 15 minutes and sends each user their summary once a day, after the
+ * configured hour in their time zone. This way it survives server restarts
+ * without sending twice.
  */
 export async function runNightly(now = new Date()): Promise<void> {
   const all = await db.query.users.findMany();
@@ -19,7 +19,7 @@ export async function runNightly(now = new Date()): Promise<void> {
     try {
       await nightlyFor(user, now);
     } catch (err) {
-      console.error(`[nightly] falló para el usuario ${user.id}`, err);
+      console.error(`[nightly] failed for user ${user.id}`, err);
     }
   }
 }
@@ -29,7 +29,7 @@ async function nightlyFor(user: User, now: Date): Promise<void> {
   if (localHour(now, user.timezone) < config.NIGHTLY_HOUR || user.lastNightlyOn === today) return;
 
   if (!isWindowOpen(user.lastInboundAt, now)) {
-    // Sin plantillas (sandbox) no podemos escribir fuera de la ventana de 24 h.
+    // Without templates (sandbox) we can't message outside the 24h window.
     await db.update(users).set({ lastNightlyOn: today }).where(eq(users.id, user.id));
     return;
   }
@@ -47,7 +47,7 @@ async function nightlyFor(user: User, now: Date): Promise<void> {
 
   if (await sendText(user, lines.join("\n"))) {
     await db.update(users).set({ lastNightlyOn: today }).where(eq(users.id, user.id));
-    // Los pendientes listados ya cuentan como preguntados; el resto sale en la cola.
+    // Listed pending items count as asked; the rest go out with the queue.
     await markAsked(pending.filter((tx) => !tx.askedAt).map((tx) => tx.id));
     await flushQueuedQuestions(user);
   }

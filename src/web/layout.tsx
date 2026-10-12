@@ -57,7 +57,7 @@ details.manual > summary { cursor: pointer; padding: 8px 0 12px; }
 [hidden] { display: none !important; }
 `;
 
-// Utilidades compartidas por las páginas (copiar, POST JSON y el flujo de verificación por WhatsApp).
+// Helpers shared by the pages (copy, JSON POST and the WhatsApp verification flow).
 const CLIENT_JS = `
 async function postJSON(url, body) {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -133,7 +133,7 @@ export function CopyField(props: { id: string; value: string }) {
   );
 }
 
-/** Paso 2 del registro/entrada: enviar el código por WhatsApp y esperar. */
+/** Step 2 of sign-up/login: send the code over WhatsApp and wait. */
 export function VerifyStep() {
   return (
     <section id="step-verify" class="card" hidden>

@@ -1,6 +1,6 @@
 /**
- * Límite simple en memoria (ventana fija por clave). Suficiente para una sola
- * instancia; si escalamos a varias, habría que moverlo a Postgres o Redis.
+ * Simple in-memory rate limit (fixed window per key). Enough for a single
+ * instance; with several, it would have to move to Postgres or Redis.
  */
 export function createRateLimiter(limit: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();

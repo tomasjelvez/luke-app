@@ -9,7 +9,7 @@ import { formatSummary, summarize } from "../services/expenses.js";
 import { hasCapacity, rotateApplePayToken, updateProfile } from "../services/users.js";
 import { clearSessionCookie, clientIp, setSessionCookie, type AppEnv } from "./session.js";
 
-/** API JSON: la usa la web y la usará la app móvil. */
+/** JSON API, used by the web and (soon) the mobile app. */
 export const api = new Hono<AppEnv>();
 
 const authStartLimit = createRateLimiter(10, 15 * 60 * 1000);
@@ -36,12 +36,12 @@ export function applePaySetup(token?: string) {
   };
 }
 
-/** Abre el Atajo compartido sin entrada: hace el envío de prueba ("Probar conexión"). */
+/** Runs the shared Shortcut with no input, which sends the connection test ("Probar conexión"). */
 export function shortcutRunUrl(): string {
   return `shortcuts://run-shortcut?name=${encodeURIComponent(config.APPLE_PAY_SHORTCUT_NAME)}`;
 }
 
-// --- Registro y entrada --------------------------------------------------------
+// --- Sign-up and login ----------------------------------------------------------
 
 api.post("/auth/signup", async (c) => {
   if (!authStartLimit(clientIp(c))) return c.json({ error: "Demasiados intentos, espera unos minutos." }, 429);
@@ -84,7 +84,7 @@ api.post("/auth/logout", async (c) => {
   return c.json({ ok: true });
 });
 
-// --- Cuenta (requiere sesión) -------------------------------------------------------
+// --- Account (requires a session) --------------------------------------------------
 
 const me = new Hono<AppEnv>();
 

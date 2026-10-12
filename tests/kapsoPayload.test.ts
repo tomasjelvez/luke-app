@@ -15,16 +15,16 @@ const audio = {
 };
 
 describe("extractEvents", () => {
-  it("lee un evento suelto con transcripción de audio", () => {
+  it("reads a single event with an audio transcript", () => {
     const [e] = extractEvents(audio);
     expect(e?.message.kapso?.transcript?.text).toBe("almuerzo quince dólares");
   });
 
-  it("lee lotes", () => {
+  it("reads batches", () => {
     expect(extractEvents({ type: "whatsapp.message.received", batch: true, data: [audio, audio] })).toHaveLength(2);
   });
 
-  it("lee respuestas de botones y mensajes citados", () => {
+  it("reads button replies and quoted messages", () => {
     const [e] = extractEvents({
       message: {
         id: "wamid.1",
@@ -38,7 +38,7 @@ describe("extractEvents", () => {
     expect(e?.message.context?.id).toBe("wamid.0");
   });
 
-  it("ignora payloads desconocidos", () => {
+  it("ignores unknown payloads", () => {
     expect(extractEvents({ foo: 1 })).toEqual([]);
   });
 });

@@ -5,7 +5,7 @@ import { emoji, markAsked, unaskedPending } from "./expenses.js";
 
 const MAX_INDIVIDUAL_QUESTIONS = 3;
 
-/** Pregunta por un gasto detectado automáticamente. Devuelve false si la ventana está cerrada. */
+/** Asks about an automatically detected expense. Returns false if the window is closed. */
 export async function askAbout(user: User, tx: Transaction): Promise<boolean> {
   const amount = formatMoney(tx.amountMinor, tx.currency, user.currency);
   const sent = await sendButtons(
@@ -21,7 +21,7 @@ export async function askAbout(user: User, tx: Transaction): Promise<boolean> {
   return sent;
 }
 
-/** Envía las preguntas que quedaron en cola mientras la ventana de 24 h estaba cerrada. */
+/** Sends the questions queued while the 24h window was closed. */
 export async function flushQueuedQuestions(user: User): Promise<void> {
   const queued = await unaskedPending(user.id);
   if (queued.length === 0) return;

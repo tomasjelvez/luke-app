@@ -8,7 +8,7 @@ export const SESSION_COOKIE = "luke_session";
 
 export type AppEnv = { Variables: { user: User | undefined; sessionToken: string | undefined } };
 
-/** Lee la sesión desde la cookie (web) o desde `Authorization: Bearer` (app móvil). */
+/** Reads the session from the cookie (web) or from `Authorization: Bearer` (mobile app). */
 export const sessionMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const bearer = c.req.header("Authorization")?.match(/^Bearer (.+)$/)?.[1];
   const token = bearer ?? getCookie(c, SESSION_COOKIE);

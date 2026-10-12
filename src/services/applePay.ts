@@ -15,16 +15,16 @@ export const ApplePayPayload = z
     amount: z.preprocess(emptyToUndefined, z.union([z.string(), z.number()]).transform(String).optional()),
     merchant: z.preprocess(emptyToUndefined, z.string().trim().optional()),
     card: z.preprocess(emptyToUndefined, z.string().optional()),
-    // Moneda opcional por si el Atajo la manda aparte.
+    // Optional currency, in case the Shortcut sends it separately.
     currency: z.preprocess(emptyToUndefined, z.string().length(3).optional()),
-    // Atajo compartido: la entrada completa del pago como texto (no puede leer propiedades).
+    // The whole payment input as text; used when the properties are missing.
     raw: z.preprocess(emptyToUndefined, z.string().optional()),
   })
-  .refine((p) => p.amount !== undefined || p.raw !== undefined, { message: "Falta amount o raw" });
+  .refine((p) => p.amount !== undefined || p.raw !== undefined, { message: "amount or raw is required" });
 
 type Payload = z.infer<typeof ApplePayPayload>;
 
-/** Monto, moneda y comercio: de los campos si vienen, o extraídos de `raw` con Claude. */
+/** Amount, currency and merchant: from the fields if present, or extracted from `raw` with Claude. */
 async function resolvePurchase(user: User, payload: Payload) {
   if (payload.amount !== undefined) {
     const parsed = parseAmount(payload.amount, payload.currency ?? user.currency);
@@ -32,7 +32,7 @@ async function resolvePurchase(user: User, payload: Payload) {
     return { ...parsed, currency: payload.currency ?? parsed.currency, merchant: payload.merchant ?? "Desconocido", card: payload.card };
   }
 
-  console.log(`[apple-pay] entrada cruda del usuario ${user.id}: ${JSON.stringify(payload.raw!.slice(0, 500))}`);
+  console.log(`[apple-pay] raw input from user ${user.id}: ${JSON.stringify(payload.raw!.slice(0, 500))}`);
   const extracted = await extractPurchase(payload.raw!, user.currency);
   if (!extracted?.amount || extracted.amount <= 0) return null;
   const currency = (extracted.currency ?? user.currency).toUpperCase();
@@ -56,7 +56,7 @@ export async function ingestApplePay(user: User, payload: Payload): Promise<Inge
   if (!parsed) return { status: "invalid_amount" };
   const { currency, merchant } = parsed;
 
-  // Un Atajo puede dispararse dos veces por la misma compra.
+  // A Shortcut can fire twice for the same purchase.
   const since = new Date(Date.now() - DUPLICATE_WINDOW_MS);
   const duplicate = await db.query.transactions.findFirst({
     where: and(
@@ -85,12 +85,12 @@ export async function ingestApplePay(user: User, payload: Payload): Promise<Inge
     })
     .returning();
 
-  // Primera compra: confirmamos que el Atajo quedó bien configurado.
+  // First purchase: confirm the Shortcut is set up correctly.
   if (await markApplePayConnected(user.id)) {
     await sendText(user, "🎉 ¡Tu Apple Pay quedó conectado! Desde ahora te voy a preguntar por cada compra.");
   }
 
-  // Si la ventana de 24 h está cerrada, la pregunta queda en cola (askedAt = null).
+  // If the 24h window is closed, the question stays queued (askedAt = null).
   const asked = await askAbout(user, tx!);
   return { status: "created", transaction: tx!, asked };
 }

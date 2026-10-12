@@ -8,8 +8,8 @@ const client = new WhatsAppClient({ baseUrl: config.KAPSO_BASE_URL, kapsoApiKey:
 const phoneNumberId = config.KAPSO_PHONE_NUMBER_ID;
 
 /**
- * A quién le escribimos. Puede ser un usuario registrado o alguien que todavía
- * no tiene cuenta (sin `id`), por ejemplo para mandarle el link de registro.
+ * Who we're messaging. Either a registered user or someone without an account
+ * yet (no `id`), e.g. to send them the sign-up link.
  */
 export interface Recipient {
   id?: number;
@@ -18,9 +18,9 @@ export interface Recipient {
 }
 
 interface SendOptions {
-  /** Gasto al que se refiere el mensaje, para entender respuestas citadas. */
+  /** Expense the message refers to, to understand quoted replies. */
   transactionId?: number;
-  /** Responde citando este mensaje. */
+  /** Reply quoting this message. */
   replyTo?: string;
 }
 
@@ -33,8 +33,8 @@ async function logOutbound(to: Recipient, wamid: string | undefined, type: strin
 }
 
 /**
- * Envía texto libre. Fuera de la ventana de 24 h WhatsApp lo rechazaría, así
- * que devolvemos false y quien llama decide si deja la pregunta en cola.
+ * Sends free-form text. WhatsApp would reject it outside the 24h window, so we
+ * return false and the caller decides whether to queue the question.
  */
 export async function sendText(to: Recipient, body: string, opts: SendOptions = {}): Promise<boolean> {
   if (!isWindowOpen(to.lastInboundAt)) return false;
@@ -59,7 +59,7 @@ export async function sendButtons(
     phoneNumberId,
     to: to.phone,
     bodyText,
-    // WhatsApp limita los títulos de botones a 20 caracteres.
+    // WhatsApp limits button titles to 20 characters.
     buttons: buttons.map((b) => ({ id: b.id, title: b.title.slice(0, 20) })),
     contextMessageId: opts.replyTo,
   });
@@ -67,16 +67,16 @@ export async function sendButtons(
   return true;
 }
 
-/** Marca como leído y muestra "escribiendo…" mientras procesamos. */
+/** Marks as read and shows "typing…" while we process. */
 export async function markReadWithTyping(messageId: string) {
   try {
     await client.messages.markRead({ phoneNumberId, messageId, typingIndicator: { type: "text" } });
   } catch (err) {
-    console.warn("[whatsapp] markRead falló", err);
+    console.warn("[whatsapp] markRead failed", err);
   }
 }
 
-/** Link que abre WhatsApp con un mensaje ya escrito para Luke. */
+/** Link that opens WhatsApp with a prefilled message to Luke. */
 export function waLink(text: string): string {
   return `https://wa.me/${config.WHATSAPP_BOT_NUMBER}?text=${encodeURIComponent(text)}`;
 }

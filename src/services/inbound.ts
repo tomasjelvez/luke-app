@@ -22,8 +22,8 @@ import {
 } from "./expenses.js";
 import { findUserByPhone, normalizePhone, touchInbound } from "./users.js";
 
-// Mensajes de números sin cuenta: no van a la tabla `messages` (exige usuario),
-// así que deduplicamos los reintentos del webhook en memoria.
+// Messages from numbers without an account don't go into `messages` (it needs a
+// user), so webhook retries are deduplicated in memory.
 const recentUnknownWamids = new Set<string>();
 
 function seenUnknown(wamid: string): boolean {
@@ -41,7 +41,7 @@ export async function handleInbound(event: InboundEvent): Promise<void> {
   const { message } = event;
   const phone = senderPhone(event);
   if (!phone) {
-    console.warn("[inbound] mensaje sin número de origen, ignorado");
+    console.warn("[inbound] message without a sender number, ignored");
     return;
   }
 
@@ -50,7 +50,7 @@ export async function handleInbound(event: InboundEvent): Promise<void> {
   const code = text ? findCode(text) : null;
   let user = await findUserByPhone(phone);
 
-  // Alguien sin cuenta: o viene a registrarse con su código, o le mandamos el link.
+  // Someone without an account: either they're signing up with a code, or we send them the link.
   if (!user) {
     if (seenUnknown(message.id)) return;
     await markReadWithTyping(message.id);
@@ -71,7 +71,7 @@ export async function handleInbound(event: InboundEvent): Promise<void> {
     .values({ wamid: message.id, userId: user.id, direction: "inbound", type: message.type, body: text })
     .onConflictDoNothing()
     .returning();
-  if (!logged) return; // Webhook repetido: ya lo procesamos.
+  if (!logged) return; // Repeated webhook: already processed.
 
   user = await touchInbound(user, now);
   await markReadWithTyping(message.id);
@@ -92,7 +92,7 @@ export async function handleInbound(event: InboundEvent): Promise<void> {
       });
     }
   } catch (err) {
-    console.error("[inbound] error procesando mensaje", err);
+    console.error("[inbound] error processing message", err);
     await sendText(user, "Tuve un problema procesando eso 🙈 ¿Lo intentas de nuevo?", { replyTo: message.id });
   }
 
@@ -174,7 +174,7 @@ async function handleText(user: User, text: string, quotedTxId: number | null, r
     lines.push('No entendí 🤔 Prueba con algo como "almuerzo 15 dólares" o mándame un audio.');
   }
 
-  // Si la respuesta habla de un solo gasto, la vinculamos para poder corregirlo citándola.
+  // If the reply is about a single expense, link it so it can be corrected by quoting it.
   await sendText(user, lines.join("\n"), { replyTo, transactionId: touched.length === 1 ? touched[0] : undefined });
 }
 
@@ -235,11 +235,11 @@ async function applyAction(user: User, a: InterpretedAction): Promise<{ line: st
     }
 
     case "smalltalk":
-      return null; // El texto viene en `interpretation.reply`.
+      return null; // The text comes in `interpretation.reply`.
   }
 }
 
-/** "Ayer" u otra fecha → mediodía de ese día local; sin fecha → ahora. */
+/** "Ayer" or another date → noon of that local day; no date → now. */
 function occurredAt(date: string | null, user: User): Date {
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date === localDate(new Date(), user.timezone)) return new Date();
   return new Date(startOfLocalDay(date, user.timezone).getTime() + 12 * 60 * 60 * 1000);

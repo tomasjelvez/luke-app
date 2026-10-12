@@ -35,7 +35,7 @@ export function SignupPage() {
       const f = e.target, btn = f.querySelector("button"), err = document.getElementById("form-error");
       btn.disabled = true; err.textContent = "";
       try {
-        // Ojo: f.name sería el atributo "name" del <form>, no el campo; por eso usamos FormData.
+        // Careful: f.name would be the <form>'s "name" attribute, not the field; hence FormData.
         await verifyWithWhatsApp("/api/auth/signup", Object.fromEntries(new FormData(f)),
           (m) => (document.getElementById("verify-error").textContent = m));
       } catch (e) { err.textContent = e.message; btn.disabled = false; }
@@ -200,7 +200,7 @@ export function ApplePayPage(props: {
       if (btn.dataset.existing === "1" && !confirm("Tu código anterior dejará de funcionar. ¿Continuar?")) return;
       btn.disabled = true; err.textContent = "";
       const token = postJSON("/api/me/apple-pay-token").then((r) => r.token);
-      // Safari solo deja copiar durante el toque: le pasamos la promesa en vez de esperar la respuesta.
+      // Safari only allows copying during the tap: pass it the promise instead of awaiting the response.
       let copied = false;
       try {
         await navigator.clipboard.write([new ClipboardItem({ "text/plain": token.then((t) => new Blob([t], { type: "text/plain" })) })]);
@@ -229,7 +229,7 @@ export function ApplePayPage(props: {
         waitForConnection(Date.now());
       } catch (e) { alert(e.message); btn.disabled = false; }
     });
-    // Espera la primera compra recibida después de "since" (no una conexión anterior).
+    // Waits for the first purchase received after "since" (not an earlier connection).
     let waitingSince = null;
     function waitForConnection(since) {
       const running = waitingSince !== null;

@@ -7,14 +7,14 @@ const body = '{"message":{"id":"wamid.1"}}';
 const sign = (b: string) => createHmac("sha256", secret).update(b).digest("hex");
 
 describe("verifyKapsoSignature", () => {
-  it("acepta una firma válida", () => {
+  it("accepts a valid signature", () => {
     expect(verifyKapsoSignature(body, sign(body), secret)).toBe(true);
   });
 
-  it("rechaza firma ausente, inválida o de otro cuerpo", () => {
+  it("rejects a missing, invalid or mismatched signature", () => {
     expect(verifyKapsoSignature(body, undefined, secret)).toBe(false);
     expect(verifyKapsoSignature(body, "abc", secret)).toBe(false);
     expect(verifyKapsoSignature(body, sign(body + " "), secret)).toBe(false);
-    expect(verifyKapsoSignature(body, sign(body), "otro")).toBe(false);
+    expect(verifyKapsoSignature(body, sign(body), "other")).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-/** Verifica la firma HMAC-SHA256 (hex) que Kapso manda en `X-Webhook-Signature`. */
+/** Verifies the HMAC-SHA256 (hex) signature Kapso sends in `X-Webhook-Signature`. */
 export function verifyKapsoSignature(rawBody: string, signature: string | undefined, secret: string): boolean {
   if (!signature) return false;
   const expected = createHmac("sha256", secret).update(rawBody).digest();

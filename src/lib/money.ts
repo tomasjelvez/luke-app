@@ -1,4 +1,4 @@
-/** Decimales que usa cada moneda (CLP: 0, AUD: 2, ...). Lo sabe Intl. */
+/** Decimal places each currency uses (CLP: 0, AUD: 2, ...), as Intl knows them. */
 export function currencyDigits(currency: string): number {
   return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
     .maximumFractionDigits ?? 2;
@@ -22,8 +22,8 @@ const LOCALE_BY_CURRENCY: Record<string, string> = {
 };
 
 /**
- * "$12.50" para la moneda base; "$4.500 CLP" cuando es otra moneda, para que
- * no se confundan en un mismo resumen.
+ * "$12.50" for the base currency; "$4.500 CLP" for any other, so they aren't
+ * confused within the same summary.
  */
 export function formatMoney(minor: number, currency: string, baseCurrency?: string): string {
   const formatted = new Intl.NumberFormat(LOCALE_BY_CURRENCY[currency] ?? "en", {
@@ -34,7 +34,7 @@ export function formatMoney(minor: number, currency: string, baseCurrency?: stri
   return baseCurrency && currency !== baseCurrency ? `${formatted} ${currency}` : formatted;
 }
 
-// Prefijos más específicos primero: "A$" debe ganarle a "$".
+// Most specific prefixes first: "A$" must win over "$".
 const SYMBOLS: [string, string][] = [
   ["AU$", "AUD"],
   ["A$", "AUD"],
@@ -46,9 +46,9 @@ const SYMBOLS: [string, string][] = [
 ];
 
 /**
- * Interpreta el monto que entrega el Atajo de Apple Pay. iOS lo formatea según
- * la región del teléfono, así que puede venir como "$12.50", "A$12.50",
- * "AUD 1,234.50", "CLP 4.500" o "12,50 €".
+ * Parses the amount the Apple Pay Shortcut sends. iOS formats it according to
+ * the phone's region, so it can arrive as "$12.50", "A$12.50", "AUD 1,234.50",
+ * "CLP 4.500" or "12,50 €".
  */
 export function parseAmount(
   input: string,
@@ -76,7 +76,7 @@ function parseNumber(s: string, digits: number): number | null {
 
   let normalized: string;
   if (lastDot !== -1 && lastComma !== -1) {
-    // Ambos separadores: el que aparece al final es el decimal.
+    // Both separators: the last one is the decimal separator.
     const decimal = lastDot > lastComma ? "." : ",";
     const thousands = decimal === "." ? "," : ".";
     normalized = s.split(thousands).join("").replace(decimal, ".");
@@ -84,8 +84,8 @@ function parseNumber(s: string, digits: number): number | null {
     const sep = lastDot !== -1 ? "." : ",";
     const parts = s.split(sep);
     const tail = parts.at(-1) ?? "";
-    // Es separador de miles si se repite ("1.234.567"), si la moneda no usa
-    // decimales (CLP) o si le siguen exactamente 3 dígitos ("1,500").
+    // It's a thousands separator if it repeats ("1.234.567"), if the currency has
+    // no decimals (CLP) or if exactly 3 digits follow it ("1,500").
     const isThousands = parts.length > 2 || digits === 0 || tail.length === 3;
     normalized = isThousands ? parts.join("") : parts.join(".");
   } else {

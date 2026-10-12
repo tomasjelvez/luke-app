@@ -47,7 +47,7 @@ export async function updateProfile(userId: number, data: Partial<SignupData>): 
   return updated!;
 }
 
-/** Genera un token nuevo de Apple Pay. El anterior deja de funcionar. Solo devolvemos el token esta vez. */
+/** Generates a new Apple Pay token; the previous one stops working. The token is only returned this once. */
 export async function rotateApplePayToken(userId: number): Promise<string> {
   const token = randomToken(24);
   await db
@@ -57,7 +57,7 @@ export async function rotateApplePayToken(userId: number): Promise<string> {
   return token;
 }
 
-/** Marca Apple Pay como conectado. Devuelve true solo la primera vez. */
+/** Marks Apple Pay as connected. Returns true only the first time. */
 export async function markApplePayConnected(userId: number, at = new Date()): Promise<boolean> {
   const updated = await db
     .update(users)
@@ -68,8 +68,8 @@ export async function markApplePayConnected(userId: number, at = new Date()): Pr
 }
 
 /**
- * Migración del MVP de un solo usuario: asocia el `APPLE_PAY_TOKEN` del entorno
- * a la cuenta de `OWNER_PHONE`, así su Atajo sigue funcionando sin cambios.
+ * Migration from the single-user MVP: links the `APPLE_PAY_TOKEN` env var to the
+ * `OWNER_PHONE` account, so its Shortcut keeps working unchanged.
  */
 export async function bootstrapLegacyOwner(): Promise<void> {
   if (!config.OWNER_PHONE || !config.APPLE_PAY_TOKEN) return;
@@ -79,5 +79,5 @@ export async function bootstrapLegacyOwner(): Promise<void> {
     .update(users)
     .set({ applePayTokenHash: sha256(config.APPLE_PAY_TOKEN), applePayConnectedAt: owner.createdAt })
     .where(eq(users.id, owner.id));
-  console.log(`[users] token de Apple Pay heredado asociado al usuario ${owner.id}`);
+  console.log(`[users] legacy Apple Pay token linked to user ${owner.id}`);
 }
